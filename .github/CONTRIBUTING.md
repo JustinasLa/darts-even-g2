@@ -117,7 +117,7 @@ Keep changes consistent with the existing code:
 - `src/games.test.ts` - Vitest suite for the scoring and checkout logic.
 - `src/main.test.ts` - phone UI and G2 integration tests using a mocked SDK transport.
 - `src/i18n.ts` - localisation string table.
-- `src/i18n.test.ts` - language and game-string tests.
+- `src/i18n.test.ts` - translation and game-string tests.
 
 Darts runs entirely on-device: no proxy, no API key, no network permissions.
 If you're planning a larger change, open an issue first to discuss it before

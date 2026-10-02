@@ -8,7 +8,6 @@
   --on-dark: #FFFFFF;
   --red: #FF453A;
   --green: #4BB956;
-  --amber: #ef7d00;
   --accent: #FEF991;
   --shade-soft: rgba(35, 35, 35, .08);
   --radius: 6px;
@@ -178,7 +177,6 @@ input { font-family: var(--font); }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.hint-empty { min-height: 18px; }
 
 .board-wrap { flex: 1; overflow: auto; margin-bottom: 8px; }
 
@@ -208,7 +206,6 @@ input { font-family: var(--font); }
 .pcard-winner { background: var(--accent); border-color: var(--ink); }
 .pcard-out { opacity: .5; }
 .pcard-head { display: flex; align-items: center; justify-content: space-between; }
-.pname { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ptag { font-size: 14px; }
 .ptag-out { font-size: 11px; color: var(--red); font-weight: 600; }
 .pscore { font-size: 40px; font-weight: 700; line-height: 1.05; letter-spacing: -1px; }
@@ -332,7 +329,6 @@ input { font-family: var(--font); }
   max-width: 320px;
   text-align: center;
 }
-.over-title { font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-2); }
 .over-winner { font-size: 24px; font-weight: 700; margin: 8px 0 20px; }
 .over-actions { display: flex; flex-direction: column; gap: 8px; }
 .over-actions .primary-btn { margin-top: 0; }

@@ -68,7 +68,7 @@ src/
   games.test.ts     Vitest suite for the scoring and checkout logic
   main.test.ts      phone UI and G2 gesture/bridge integration tests
   i18n.ts           string table (t('key'))
-  i18n.test.ts      language and game-string tests
+  i18n.test.ts      translation and game-string tests
   style.css         Even OS 2.0 styling
   icons/            Even OS 2.0 icon set (inlined as raw SVG)
 images/             glasses + phone screenshots, store QR
