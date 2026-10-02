@@ -66,7 +66,9 @@ src/
   main.ts           SDK bridge: lens score entry + side panel, and the phone keypad UI
   games.ts          game engine: X01 + Cricket rules, scoring, checkout finder
   games.test.ts     Vitest suite for the scoring and checkout logic
+  main.test.ts      phone UI and G2 gesture/bridge integration tests
   i18n.ts           string table (t('key'))
+  i18n.test.ts      language and game-string tests
   style.css         Even OS 2.0 styling
   icons/            Even OS 2.0 icon set (inlined as raw SVG)
 images/             glasses + phone screenshots, store QR
@@ -109,13 +111,24 @@ Run the tests:
 
 ```bash
 npm test             # vitest run (src/**/*.test.ts)
+npm run test:coverage # full application coverage, enforced per file
 ```
+
+Coverage requires **100% statements, branches, functions and lines** for every
+application TypeScript file, including the phone UI and G2 bridge in `src/main.ts`.
+Only tests and TypeScript declarations are excluded. Open `coverage/index.html`
+for the HTML report; CI also uploads the report as an artifact.
+
+The UI tests use jsdom and a mocked Even Hub transport with the SDK's real event
+constants and container models. They exercise phone controls, temple gestures,
+staged dart entry, checkout panels, startup, rendering order and shutdown. They
+do not require glasses and do not validate physical hardware or BLE transport.
 
 ## Tech stack
 
 - **@evenrealities/even_hub_sdk** - glasses rendering + gesture events
 - **Vite + TypeScript** - build and dev server
-- **Vitest** - unit tests for the scoring and checkout engine
+- **Vitest + jsdom** - scoring, checkout, phone UI and G2 bridge tests
 - **@evenrealities/evenhub-cli** - `qr` / `pack`
 - **@evenrealities/evenhub-simulator** - local preview + screenshot automation
 - **Even OS 2.0** - design tokens and icon set

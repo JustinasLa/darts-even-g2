@@ -104,5 +104,5 @@ export function setLang(lang: Lang): void {
 }
 
 export function t(key: StringKey): string {
-  return STRINGS[current][key] || en[key]
+  return STRINGS[current][key]
 }

@@ -275,8 +275,6 @@ interface X01State extends Core {
   doubleIn: boolean
   legsTarget: number
   setsTarget: number
-  dartLimit: number
-  failed: boolean
   turnStart: number
   turnStartDarts: number
   turnStartScored: number
@@ -286,7 +284,7 @@ interface X01State extends Core {
 }
 
 class X01Game extends GameBase<X01State> {
-  constructor(names: string[], cfg: { start: number; doubleOut: boolean; doubleIn: boolean; legsTarget: number; setsTarget: number; dartLimit: number }) {
+  constructor(names: string[], cfg: { start: number; doubleOut: boolean; doubleIn: boolean; legsTarget: number; setsTarget: number }) {
     const players: X01Player[] = []
     for (let i = 0; i < names.length; i++) {
       players.push({ score: cfg.start, legs: 0, sets: 0, in: !cfg.doubleIn, dartsUsed: 0, scored: 0 })
@@ -300,8 +298,6 @@ class X01Game extends GameBase<X01State> {
       doubleIn: cfg.doubleIn,
       legsTarget: cfg.legsTarget,
       setsTarget: cfg.setsTarget,
-      dartLimit: cfg.dartLimit,
-      failed: false,
       turnStart: cfg.start,
       turnStartDarts: 0,
       turnStartScored: 0,
@@ -313,7 +309,7 @@ class X01Game extends GameBase<X01State> {
 
   applyDart(d: Dart): void {
     const s = this.state
-    if (s.finished || this.turnFull()) {
+    if (s.finished) {
       return
     }
     this.save()
@@ -365,14 +361,6 @@ class X01Game extends GameBase<X01State> {
   }
 
   private afterDart(): void {
-    const s = this.state
-    const p = s.players[s.active]
-    if (s.dartLimit > 0 && p.dartsUsed >= s.dartLimit) {
-      s.finished = true
-      s.failed = true
-      s.winner = null
-      return
-    }
     if (this.turnFull()) {
       this.commitTurn()
     }
@@ -443,15 +431,6 @@ class X01Game extends GameBase<X01State> {
         out: false,
       })
     }
-    let hint = ''
-    const active = s.players[s.active]
-    if (s.dartLimit > 0 && !s.finished) {
-      hint = t('darts') + ' ' + active.dartsUsed + '/' + s.dartLimit
-    }
-    let message = s.message
-    if (s.finished && s.failed) {
-      message = t('noCheckout')
-    }
     let average = '0.0'
     if (s.turnStartDarts > 0) {
       average = ((s.turnStartScored / s.turnStartDarts) * 3).toFixed(1)
@@ -462,8 +441,8 @@ class X01Game extends GameBase<X01State> {
     }
     return {
       title: String(s.start),
-      hint,
-      message,
+      hint: '',
+      message: s.message,
       layout: 'score',
       turn: turnSlots(s.turn),
       turnTotal: turnTotal(s.turn),
@@ -548,14 +527,14 @@ class CricketGame extends GameBase<CricketState> {
 
   applyDart(d: Dart): void {
     const s = this.state
-    if (s.finished || this.turnFull()) {
+    if (s.finished) {
       return
     }
     this.save()
     s.message = ''
     s.turn.push(d)
     const idx = this.idxOf(d.value)
-    if (idx >= 0 && d.value !== 0) {
+    if (idx >= 0) {
       const p = s.players[s.active]
       let marks = d.mult
       if (d.value === 25) {
@@ -718,7 +697,6 @@ function x01Def(id: string, start: number, name: StringKey, blurb: StringKey): G
         doubleIn: optBool(opts, 'doubleIn', false),
         legsTarget: optInt(opts, 'legs', 1),
         setsTarget: optInt(opts, 'sets', 1),
-        dartLimit: 0,
       })
     },
   }

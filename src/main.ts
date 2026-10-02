@@ -171,9 +171,6 @@ function markSymbol(m: number): string {
 }
 
 function lensMarkSymbol(m: number): string {
-  if (m >= 3) {
-    return '●'
-  }
   if (m === 2) {
     return 'X'
   }
@@ -368,19 +365,16 @@ function lensContent(): string {
   if (screen === 'category') {
     return lensCategory()
   }
-  if (screen === 'game' && game) {
-    if (confirmQuit) {
-      return lensConfirmQuit()
-    }
-    if (lensEntry === 'mult') {
-      return lensMultScreen()
-    }
-    if (lensEntry === 'num') {
-      return lensNumScreen()
-    }
-    return game.lens(lensSel, pendingDarts)
+  if (confirmQuit) {
+    return lensConfirmQuit()
   }
-  return t('appTitle')
+  if (lensEntry === 'mult') {
+    return lensMultScreen()
+  }
+  if (lensEntry === 'num') {
+    return lensNumScreen()
+  }
+  return game!.lens(lensSel, pendingDarts)
 }
 
 const GAME_ROWS = 4
@@ -391,13 +385,10 @@ function moveLens(delta: number) {
     count = CAT_ORDER.length
   } else if (screen === 'category') {
     count = gamesByCategory(activeCategory).length
-  } else if (screen === 'game') {
-    if (!game) {
-      return
-    }
+  } else {
     if (confirmQuit) {
       count = 2
-    } else if (game.view().finished) {
+    } else if (game!.view().finished) {
       return
     } else if (lensEntry === 'mult') {
       count = lensMultOptions().length
@@ -406,8 +397,6 @@ function moveLens(delta: number) {
     } else {
       count = GAME_ROWS
     }
-  } else {
-    return
   }
   if (count === 0) {
     return
@@ -424,9 +413,6 @@ function moveLens(delta: number) {
 
 function selectLens() {
   if (screen === 'game') {
-    if (!game) {
-      return
-    }
     if (confirmQuit) {
       if (lensSel === 1) {
         quitGame()
@@ -471,9 +457,6 @@ function selectLensGame() {
   }
   if (lensEntry === 'mult') {
     const opt = lensMultOptions()[lensSel]
-    if (!opt) {
-      return
-    }
     if (opt.dart) {
       commitLensDart(opt.dart)
     } else {
@@ -505,11 +488,7 @@ function commitLensDart(d: Dart) {
   if (pendingDarts.length < 3) {
     pendingDarts.push(d)
   }
-  let next = pendingDarts.length
-  if (next > GAME_ROWS - 1) {
-    next = GAME_ROWS - 1
-  }
-  lensSel = next
+  lensSel = pendingDarts.length
   drawLens(lensContent())
 }
 
@@ -518,9 +497,6 @@ function confirmLensTurn() {
   pendingDarts = []
   for (const d of darts) {
     const before = game!.view()
-    if (before.finished) {
-      break
-    }
     const beforeLen = before.turn.length
     game!.applyDart(d)
     const after = game!.view()
@@ -569,11 +545,7 @@ function backLens(): boolean {
     }
     if (lensEntry === 'mult') {
       lensEntry = 'list'
-      let back = lensEditIndex
-      if (back > GAME_ROWS - 1) {
-        back = GAME_ROWS - 1
-      }
-      lensSel = back
+      lensSel = lensEditIndex
       drawLens(lensContent())
       return true
     }
