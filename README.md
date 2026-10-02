@@ -18,8 +18,8 @@ Scan with the **Even Realities app** on your phone, or open the listing on Even 
 
 - **Heads-up scoreboard** - remaining score, last turn, 3-dart leg average and a
   live checkout suggestion, all on the lens.
-- **X01** - 301, 501, 701 and 901 with **double-in** / **double-out**, configurable
-  **legs** and **sets**, automatic bust handling and checkout routes up to 170.
+- **X01** - 301, 501, 701 and 901 for one player, with **double-out**, a single
+  leg, automatic bust handling and checkout routes up to 170.
 - **Cricket** - Standard, No-Score, Tactics (10-20 + bull) and Random (seven
   random targets), with mark tracking and point scoring.
 - **Per-dart entry** - build a turn of up to three darts, review it, then confirm;

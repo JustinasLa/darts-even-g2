@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
   build:
@@ -39,4 +38,4 @@ jobs:
           if-no-files-found: ignore
 
       - name: Pack
-        run: npm run pack
+        run: npx evenhub pack app.json dist -o darts.ehpk

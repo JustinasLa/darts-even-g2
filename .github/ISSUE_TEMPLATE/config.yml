@@ -1,5 +1,1 @@
-blank_issues_enabled: false
-contact_links:
-  - name: Question or discussion
-    url: https://github.com/JustinasLaunikonis/darts-even-g2/discussions
-    about: Ask a question or discuss the project here instead of opening an issue.
+blank_issues_enabled: true
