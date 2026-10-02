@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  EvenAppBridge,
   OsEventTypeList,
+  evenHubEventFromJson,
   waitForEvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
 import type {
   CreateStartUpPageContainer,
-  EvenAppBridge,
   EvenHubEvent,
   TextContainerUpgrade,
 } from '@evenrealities/even_hub_sdk'
@@ -42,6 +43,11 @@ beforeEach(async function () {
   sdk.bridge.shutDownPageContainer.mockReset().mockResolvedValue(true)
   sdk.bridge.onEvenHubEvent.mockReset().mockImplementation(function (handler) {
     sdk.handler = handler
+    const unsubscribe = EvenAppBridge.prototype.onEvenHubEvent.call(sdk.bridge as unknown as EvenAppBridge, handler)
+    sdk.unsubscribe.mockImplementation(function () {
+      sdk.handler = undefined
+      unsubscribe()
+    })
     return sdk.unsubscribe
   })
   vi.mocked(waitForEvenAppBridge).mockReset().mockResolvedValue(sdk.bridge as unknown as EvenAppBridge)
@@ -50,6 +56,7 @@ beforeEach(async function () {
 
 afterEach(async function () {
   await flush()
+  sdk.unsubscribe()
   vi.restoreAllMocks()
 })
 
@@ -69,9 +76,8 @@ async function click(selector: string): Promise<void> {
   await flush()
 }
 
-async function event(payload: { sysEvent?: { eventType?: number | null }; textEvent?: { eventType?: number | null } }): Promise<void> {
-  expect(sdk.handler).toBeDefined()
-  sdk.handler!(payload as EvenHubEvent)
+async function event(payload: { sysEvent?: { eventType?: number | null }; textEvent?: { eventType?: number | null }; jsonData?: Record<string, unknown> }): Promise<void> {
+  window.dispatchEvent(new CustomEvent('evenHubEvent', { detail: payload }))
   await flush()
 }
 
@@ -160,27 +166,82 @@ describe('Even G2 bridge', function () {
     expect(document.querySelectorAll('[data-cat]')).toHaveLength(2)
   })
 
-  it('reports a failed startup result', async function () {
-    sdk.bridge.createStartUpPageContainer.mockResolvedValue(1)
+  it.each([1, 2, 3])('keeps the phone usable without native updates after startup result %s', async function (result) {
+    sdk.bridge.createStartUpPageContainer.mockResolvedValue(result)
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     await load()
-    expect(error).toHaveBeenCalledWith('createStartUpPageContainer failed:', 1)
-    expect(lens()).toContain('Darts')
+    expect(error).toHaveBeenCalledWith('createStartUpPageContainer failed:', result)
+    await back()
+    expect(sdk.bridge.shutDownPageContainer).not.toHaveBeenCalled()
+    await open()
+    await click('[data-num="20"]')
+    expect(document.querySelector('.pscore')!.textContent).toBe('281')
+    expect(sdk.bridge.textContainerUpgrade).not.toHaveBeenCalled()
+  })
+
+  it('keeps the phone usable when startup rejects', async function () {
+    const failure = new Error('Startup transport failure')
+    sdk.bridge.createStartUpPageContainer.mockRejectedValue(failure)
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await load()
+    expect(error).toHaveBeenCalledWith('createStartUpPageContainer failed:', failure)
+    await open()
+    await click('[data-num="20"]')
+    expect(document.querySelector('.pscore')!.textContent).toBe('281')
+    expect(sdk.bridge.textContainerUpgrade).not.toHaveBeenCalled()
   })
 
   it('serializes lens updates and snapshots the panel for each draw', async function () {
+    await load()
+    await open('cricket')
+    sdk.bridge.textContainerUpgrade.mockClear()
     let release!: (value: boolean) => void
     sdk.bridge.textContainerUpgrade.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
-    await load()
+    await click('[data-num="20"]')
     expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledTimes(1)
-    await click('[data-cat="x01"]')
+    await click('[data-num="20"]')
     expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledTimes(1)
     release(true)
     await flush()
-    expect(sdk.bridge.textContainerUpgrade.mock.calls.map(([update]) => [update.containerID, update.content])).toEqual([
-      [1, 'Darts\n\n> X01\n  Cricket'], [2, ''],
-      [1, 'X01\n\n> 301\n  501\n  701\n  901'], [2, ''],
+    const updates = sdk.bridge.textContainerUpgrade.mock.calls.map(([update]) => update)
+    expect(updates.map(update => update.containerID)).toEqual([1, 2, 1, 2])
+    expect(updates.filter(update => update.containerID === 2).map(update => update.content)).toEqual([
+      '20 /\n19\n18\n17\n16\n15\nBull',
+      '20 X\n19\n18\n17\n16\n15\nBull',
     ])
+    expect(updates[0].content).not.toContain('Dart 2: 20')
+    expect(updates[2].content).toContain('Dart 2: 20')
+  })
+
+  it.each([1, 2])('continues queued renders after container %s rejects', async function (containerID) {
+    let reject!: (reason: Error) => void
+    if (containerID === 2) sdk.bridge.textContainerUpgrade.mockResolvedValueOnce(true)
+    sdk.bridge.textContainerUpgrade.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail }))
+    const failure = new Error('Update transport failure')
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await load()
+    await click('[data-cat="x01"]')
+    expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledTimes(containerID)
+    reject(failure)
+    await flush()
+    expect(error).toHaveBeenCalledWith('textContainerUpgrade failed:', failure)
+    expect(sdk.bridge.textContainerUpgrade.mock.calls.slice(containerID).map(([update]) => update.containerID)).toEqual([1, 2])
+    expect(lens()).toContain('> 301')
+  })
+
+  it.each([1, 2])('continues queued renders after container %s returns false', async function (containerID) {
+    let release!: (value: boolean) => void
+    if (containerID === 2) sdk.bridge.textContainerUpgrade.mockResolvedValueOnce(true)
+    sdk.bridge.textContainerUpgrade.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await load()
+    await click('[data-cat="x01"]')
+    expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledTimes(containerID)
+    release(false)
+    await flush()
+    expect(error).toHaveBeenCalledWith('textContainerUpgrade failed:', containerID === 1 ? 'body' : 'panel')
+    expect(sdk.bridge.textContainerUpgrade.mock.calls.slice(containerID).map(([update]) => update.containerID)).toEqual([1, 2])
+    expect(lens()).toContain('> 301')
   })
 
   it.each([undefined, null])('treats a missing system event type (%s) as a tap', async function (eventType) {
@@ -189,10 +250,33 @@ describe('Even G2 bridge', function () {
     expect(lens()).toContain('> 301')
   })
 
-  it('ignores absent, untyped text, and unrelated events', async function () {
+  it.each(['sysEvent', 'textEvent'])('accepts SDK-normalized explicit and omitted %s taps', async function (type) {
+    await load()
+    await event(evenHubEventFromJson({ type, data: { containerID: 1, eventType: 0 } }))
+    expect(lens()).toContain('> 301')
+    await back()
+    await event(evenHubEventFromJson({ type, jsonData: { Container_ID: 1 } }))
+    expect(lens()).toContain('> 301')
+  })
+
+  it.each([9, 10, 'LONG_PRESS_EVENT', 'LONG_PRESS_RELEASE_EVENT'])('ignores an explicitly unsupported SDK event type %s', async function (eventType) {
     await load()
     const calls = sdk.bridge.textContainerUpgrade.mock.calls.length
-    for (const payload of [{}, { textEvent: {} }, { textEvent: { eventType: null } }, { sysEvent: { eventType: OsEventTypeList.FOREGROUND_ENTER_EVENT } }]) {
+    for (const type of ['sysEvent', 'textEvent'] as const) {
+      for (const key of ['eventType', 'Event_Type', 'EVENT_TYPE']) {
+        const normalized = evenHubEventFromJson({ type, data: { [key]: eventType } })
+        expect(normalized[type]?.eventType).toBeUndefined()
+        await event(normalized)
+      }
+    }
+    expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledTimes(calls)
+    expect(document.querySelector('.brand')).not.toBeNull()
+  })
+
+  it('ignores absent and unrelated events', async function () {
+    await load()
+    const calls = sdk.bridge.textContainerUpgrade.mock.calls.length
+    for (const payload of [{}, { sysEvent: { eventType: OsEventTypeList.FOREGROUND_ENTER_EVENT } }, { textEvent: { eventType: OsEventTypeList.FOREGROUND_EXIT_EVENT } }]) {
       await event(payload as EvenHubEvent)
     }
     expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledTimes(calls)
@@ -202,14 +286,59 @@ describe('Even G2 bridge', function () {
     await load()
     await event({ sysEvent: { eventType } })
     expect(sdk.unsubscribe).toHaveBeenCalledOnce()
+    expect(sdk.handler).toBeUndefined()
     expect(sdk.bridge.shutDownPageContainer).not.toHaveBeenCalled()
   })
 
-  it('requests shutdown when double tapped on home', async function () {
+  it.each([OsEventTypeList.SYSTEM_EXIT_EVENT, OsEventTypeList.ABNORMAL_EXIT_EVENT])('stops queued and future native writes after exit %s', async function (eventType) {
+    let release!: (value: boolean) => void
+    sdk.bridge.textContainerUpgrade.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+    await load()
+    await click('[data-cat="x01"]')
+    await event(evenHubEventFromJson({ type: 'sysEvent', data: { eventType } }))
+    release(true)
+    await flush()
+    expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledOnce()
+    await event(evenHubEventFromJson({ type: 'sysEvent', data: { eventType: 0 } }))
+    expect(document.querySelector('.game-list')).not.toBeNull()
+    await click('[data-id="301"]')
+    expect(document.querySelector('.pscore')!.textContent).toBe('301')
+    expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledOnce()
+  })
+
+  it('keeps gestures subscribed when the home exit confirmation is cancelled', async function () {
     await load()
     await back()
-    expect(sdk.unsubscribe).toHaveBeenCalledOnce()
+    expect(sdk.unsubscribe).not.toHaveBeenCalled()
     expect(sdk.bridge.shutDownPageContainer).toHaveBeenCalledWith(1)
+    await event(evenHubEventFromJson({ type: 'sysEvent', data: { eventType: OsEventTypeList.FOREGROUND_ENTER_EVENT } }))
+    await tap()
+    expect(lens()).toContain('> 301')
+    await event({ sysEvent: { eventType: OsEventTypeList.SYSTEM_EXIT_EVENT } })
+    expect(sdk.unsubscribe).toHaveBeenCalledOnce()
+  })
+
+  it('keeps gestures subscribed when a shutdown request returns false', async function () {
+    sdk.bridge.shutDownPageContainer.mockResolvedValue(false)
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await load()
+    await back()
+    expect(error).toHaveBeenCalledWith('shutDownPageContainer failed:', false)
+    expect(sdk.unsubscribe).not.toHaveBeenCalled()
+    await tap()
+    expect(lens()).toContain('> 301')
+  })
+
+  it('keeps gestures subscribed when a shutdown request rejects', async function () {
+    const failure = new Error('Shutdown transport failure')
+    sdk.bridge.shutDownPageContainer.mockRejectedValue(failure)
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await load()
+    await back()
+    expect(error).toHaveBeenCalledWith('shutDownPageContainer failed:', failure)
+    expect(sdk.unsubscribe).not.toHaveBeenCalled()
+    await tap()
+    expect(lens()).toContain('> 301')
   })
 
   it('accepts double taps from text events and gives them priority over scrolling', async function () {
