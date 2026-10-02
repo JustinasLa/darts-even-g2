@@ -708,6 +708,21 @@ describe('lens scoreboard', function () {
     expect(g.lens(0, [])).toContain('Current Score: 57\n')
   })
 
+  it.each(['301', 'cricket'])('returns defensive copies of %s turn darts', function (id) {
+    const g = make(id, ['A'])
+    expect(g.currentTurn()).toEqual([])
+    g.applyDart(S(20))
+    const before = g.view()
+    const darts = g.currentTurn()
+    darts[0].value = 1
+    darts[0].mult = 3
+    darts.push(D(25))
+    expect(g.currentTurn()).toEqual([S(20)])
+    expect(g.view()).toEqual(before)
+    g.commitTurn()
+    expect(g.currentTurn()).toEqual([])
+  })
+
   it('shows committed score, previous turn and average alongside staged darts', function () {
     const g = make('301', ['A'])
     play(g, [T(20), T(20), T(20)])
@@ -722,6 +737,14 @@ describe('lens scoreboard', function () {
     const g = make('301', ['A'])
     g.applyDart(T(20))
     expect(g.lens(0, [])).toContain('> Dart 1: T20\n  Dart 2: \n  Dart 3: ')
+  })
+
+  it('shows applied turn darts before additional staged darts', function () {
+    const g = make('301', ['A'])
+    g.applyDart(T(20))
+    const before = g.view()
+    expect(g.lens(3, [D(19), S(18)])).toContain('Dart 1: T20\n  Dart 2: D19\n  Dart 3: 18')
+    expect(g.view()).toEqual(before)
   })
 
   it('omits score and statistics for no-score cricket and empty scoreboards', function () {
