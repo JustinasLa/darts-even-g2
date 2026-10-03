@@ -10,7 +10,7 @@ import type { EvenHubEvent } from '@evenrealities/even_hub_sdk'
 import { t } from './i18n'
 import type { StringKey } from './i18n'
 import type { Category, GameDef, Game, GameView, PlayerView } from './games'
-import { gamesByCategory, findGame, dartLabel } from './games'
+import { gamesByCategory, findGame, dartLabel, dartScore } from './games'
 import type { Dart } from './games'
 import flagIcon from './icons/Flag.svg?raw'
 import checklistIcon from './icons/Checklist.svg?raw'
@@ -397,6 +397,9 @@ function lensContent(): string {
   if (screen === 'category') {
     return lensCategory()
   }
+  if (game!.view().finished) {
+    return game!.lens(lensSel, pendingDarts)
+  }
   if (confirmQuit) {
     return lensConfirmQuit()
   }
@@ -418,10 +421,10 @@ function moveLens(delta: number) {
   } else if (screen === 'category') {
     count = gamesByCategory(activeCategory).length
   } else {
-    if (confirmQuit) {
-      count = 2
-    } else if (game!.view().finished) {
+    if (game!.view().finished) {
       return
+    } else if (confirmQuit) {
+      count = 2
     } else if (lensEntry === 'mult') {
       count = lensMultOptions().length
     } else if (lensEntry === 'num') {
@@ -433,18 +436,19 @@ function moveLens(delta: number) {
   if (count === 0) {
     return
   }
-  lensSel += delta
-  if (lensSel < 0) {
-    lensSel = 0
+  const next = Math.max(0, Math.min(lensSel + delta, count - 1))
+  if (next === lensSel) {
+    return
   }
-  if (lensSel >= count) {
-    lensSel = count - 1
-  }
+  lensSel = next
   drawLens(lensContent())
 }
 
 function selectLens() {
   if (screen === 'game') {
+    if (game!.view().finished) {
+      return
+    }
     if (confirmQuit) {
       if (lensSel === 1) {
         quitGame()
@@ -469,16 +473,12 @@ function selectLens() {
 }
 
 function selectLensGame() {
-  const v = game!.view()
-  if (v.finished) {
-    return
-  }
   if (lensEntry === 'list') {
     if (lensSel === GAME_ROWS - 1) {
       confirmLensTurn()
       return
     }
-    if (lensSel > pendingDarts.length) {
+    if (lensSel > game!.currentTurn().length + pendingDarts.length) {
       return
     }
     lensEditIndex = lensSel
@@ -510,18 +510,33 @@ function selectLensGame() {
 }
 
 function commitLensDart(d: Dart) {
+  const applied = game!.currentTurn()
+  const pendingIndex = lensEditIndex - applied.length
   lensEntry = 'list'
-  if (lensEditIndex < pendingDarts.length) {
+  if (lensEditIndex < applied.length) {
+    pendingDarts = applied.concat(pendingDarts)
+    for (let i = 0; i < applied.length; i++) {
+      game!.undo()
+    }
     pendingDarts[lensEditIndex] = d
     lensSel = lensEditIndex
-    drawLens(lensContent())
-    return
-  }
-  if (pendingDarts.length < 3) {
+  } else if (pendingIndex < pendingDarts.length) {
+    pendingDarts[pendingIndex] = d
+    lensSel = lensEditIndex
+  } else {
     pendingDarts.push(d)
+    lensSel = applied.length + pendingDarts.length
   }
-  lensSel = pendingDarts.length
-  drawLens(lensContent())
+  render()
+}
+
+function resetLensTurn() {
+  pendingDarts = []
+  lensEntry = 'list'
+  lensEntryMult = 1
+  lensEditIndex = 0
+  confirmQuit = false
+  lensSel = game!.currentTurn().length
 }
 
 function confirmLensTurn() {
@@ -569,6 +584,10 @@ function quitGame() {
 
 function backLens(): boolean {
   if (screen === 'game' && game) {
+    if (game.view().finished) {
+      quitGame()
+      return true
+    }
     if (lensEntry === 'num') {
       lensEntry = 'mult'
       lensSel = 0
@@ -583,10 +602,6 @@ function backLens(): boolean {
     }
     if (confirmQuit) {
       resumeGame()
-      return true
-    }
-    if (game.view().finished) {
-      quitGame()
       return true
     }
     confirmQuit = true
@@ -690,11 +705,7 @@ function startGame() {
   const def = activeDef!
   game = def.create([''], setupOptions)
   mult = 1
-  lensSel = 0
-  confirmQuit = false
-  lensEntry = 'list'
-  lensEditIndex = 0
-  pendingDarts = []
+  resetLensTurn()
   screen = 'game'
   render()
 }
@@ -803,10 +814,15 @@ function cricketBoard(v: GameView): string {
 }
 
 function turnBar(v: GameView): string {
+  const turn = v.turn.concat(pendingDarts.map(d => ({ label: dartLabel(d), score: dartScore(d) })))
+  let total = 0
+  for (const d of turn) {
+    total += d.score
+  }
   let slots = ''
   for (let i = 0; i < 3; i++) {
-    if (i < v.turn.length) {
-      slots += '<span class="slot slot-filled">' + esc(v.turn[i].label) + '</span>'
+    if (i < turn.length) {
+      slots += '<span class="slot slot-filled">' + esc(turn[i].label) + '</span>'
     } else {
       slots += '<span class="slot"></span>'
     }
@@ -814,7 +830,7 @@ function turnBar(v: GameView): string {
   return (
     '<div class="turnbar">' +
     '<div class="slots">' + slots + '</div>' +
-    '<div class="turntotal">' + v.turnTotal + '</div>' +
+    '<div class="turntotal">' + total + '</div>' +
     '</div>'
   )
 }
@@ -858,13 +874,13 @@ function renderGame() {
       '<div class="over-winner">' + esc(t('gameOver')) + '</div>' +
       '<div class="over-actions">' +
       '<button class="primary-btn" data-act="rematch">' + esc(t('playAgain')) + '</button>' +
-      '<button class="ghost-btn" data-act="home">' + esc(t('backToModes')) + '</button>' +
+      '<button class="ghost-btn" data-act="modes">' + esc(t('backToModes')) + '</button>' +
       '</div></div></div>'
   }
 
   app.innerHTML =
     '<main class="screen game-screen">' +
-    '<header class="topbar"><button class="icon-btn" data-act="back"><span class="btn-ico">' + chevronLeftIcon + '</span>' + esc(t('home')) + '</button>' +
+    '<header class="topbar"><button class="icon-btn" data-act="back"><span class="btn-ico">' + chevronLeftIcon + '</span>' + esc(t('back')) + '</button>' +
     '<div class="title">' + esc(v.title) + '</div>' +
     '<button class="icon-btn" data-act="undo"><span class="btn-ico">' + undoIcon + '</span>' + esc(t('undo')) + '</button></header>' +
     (v.hint ? '<div class="hint">' + esc(v.hint) + '</div>' : '<div class="hint hint-empty"></div>') +
@@ -881,12 +897,11 @@ function renderGame() {
 
 function bindGame(v: GameView) {
   app.querySelector<HTMLButtonElement>('[data-act="back"]')!.addEventListener('click', function () {
-    game = null
-    screen = 'category'
-    render()
+    quitGame()
   })
   app.querySelector<HTMLButtonElement>('[data-act="undo"]')!.addEventListener('click', function () {
     game!.undo()
+    resetLensTurn()
     mult = 1
     render()
   })
@@ -898,12 +913,10 @@ function bindGame(v: GameView) {
         startGame()
       })
     }
-    const home = app.querySelector<HTMLButtonElement>('[data-act="home"]')
-    if (home) {
-      home.addEventListener('click', function () {
-        game = null
-        screen = 'home'
-        render()
+    const modes = app.querySelector<HTMLButtonElement>('[data-act="modes"]')
+    if (modes) {
+      modes.addEventListener('click', function () {
+        quitGame()
       })
     }
     return
@@ -911,7 +924,11 @@ function bindGame(v: GameView) {
 
   app.querySelectorAll<HTMLButtonElement>('[data-mult]').forEach(function (b) {
     b.addEventListener('click', function () {
-      mult = parseInt(b.dataset.mult || '1', 10)
+      const next = parseInt(b.dataset.mult || '1', 10)
+      if (next === mult) {
+        return
+      }
+      mult = next
       render()
     })
   })
@@ -932,6 +949,7 @@ function bindGame(v: GameView) {
   })
   app.querySelector<HTMLButtonElement>('[data-act="next"]')!.addEventListener('click', function () {
     game!.commitTurn()
+    resetLensTurn()
     mult = 1
     render()
   })
@@ -942,6 +960,7 @@ function throwDart(d: Dart) {
     return
   }
   game.applyDart(d)
+  resetLensTurn()
   mult = 1
   render()
 }

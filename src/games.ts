@@ -70,6 +70,7 @@ export interface Game {
   applyDart(d: Dart): void
   commitTurn(): void
   undo(): void
+  currentTurn(): Dart[]
   view(): GameView
   lens(sel: number, pending: Dart[]): string
   checkoutFor(pending: Dart[]): Dart[] | undefined
@@ -129,6 +130,10 @@ abstract class GameBase<S extends Core> implements Game {
     return this.state.turn.length >= 3
   }
 
+  currentTurn(): Dart[] {
+    return this.state.turn.map(d => ({ ...d }))
+  }
+
   abstract applyDart(d: Dart): void
   abstract commitTurn(): void
   abstract view(): GameView
@@ -158,14 +163,11 @@ abstract class GameBase<S extends Core> implements Game {
       return lines.join('\n')
     }
     const labels: string[] = []
-    if (pending.length > 0) {
-      for (const d of pending) {
-        labels.push(dartLabel(d))
-      }
-    } else {
-      for (const slot of v.turn) {
-        labels.push(slot.label)
-      }
+    for (const slot of v.turn) {
+      labels.push(slot.label)
+    }
+    for (const d of pending) {
+      labels.push(dartLabel(d))
     }
     lines.push('')
     for (let i = 0; i < 3; i++) {

@@ -100,6 +100,10 @@ function lens(id = 1): string {
   return updates.filter(update => update.containerID === id).at(-1)?.content || ''
 }
 
+function phoneSlots(): string[] {
+  return Array.from(document.querySelectorAll('.slot-filled'), slot => slot.textContent!)
+}
+
 async function open(id = '301'): Promise<void> {
   await click('[data-cat="' + games.findGame(id)!.category + '"]')
   await click('[data-id="' + id + '"]')
@@ -140,7 +144,7 @@ function fixture(view: Partial<GameView> = {}, route?: Game['checkoutFor']): Gam
     ...view,
   }
   return {
-    applyDart: vi.fn(), commitTurn: vi.fn(), undo: vi.fn(), view: () => value,
+    applyDart: vi.fn(), commitTurn: vi.fn(), undo: vi.fn(), currentTurn: () => [], view: () => value,
     lens: vi.fn(() => 'Fixture scoreboard'), checkoutFor: route || vi.fn(() => undefined),
   }
 }
@@ -360,6 +364,7 @@ describe('phone scoreboard', function () {
     await click('[data-act="back"]')
     expect(document.querySelector('.brand')!.textContent).toBe('Darts')
     await open('501')
+    expect(document.querySelector('[data-act="back"]')!.textContent!.trim()).toBe('Back')
     expect(document.querySelector('.pscore')!.textContent).toBe('501')
     await click('[data-act="back"]')
     expect(lens()).toContain('> 301')
@@ -399,7 +404,7 @@ describe('phone scoreboard', function () {
     expect(lens(2)).toBe('T20\nT19\nD2')
   })
 
-  it('offers a rematch after a win and returns to home', async function () {
+  it('offers a rematch after a win and returns to the selected mode list', async function () {
     await load()
     await open()
     await winOnPhone()
@@ -410,8 +415,10 @@ describe('phone scoreboard', function () {
     expect(document.querySelector('.overlay')).toBeNull()
     expect(document.querySelector('.pscore')!.textContent).toBe('301')
     await winOnPhone()
-    await click('[data-act="home"]')
-    expect(document.querySelector('.brand')!.textContent).toBe('Darts')
+    await click('[data-act="modes"]')
+    expect(document.querySelector('.title')!.textContent).toBe('X01')
+    expect(document.querySelectorAll('[data-id]')).toHaveLength(4)
+    expect(lens()).toContain('> 301')
   })
 
   it('renders cricket marks on both surfaces and removes closed panel numbers', async function () {
@@ -593,7 +600,7 @@ describe('G2 gesture navigation and dart entry', function () {
     expect(lens()).toContain('> Dart 1: ')
   })
 
-  it('requires the next unfilled row and commits empty or partial turns', async function () {
+  it('requires the next unfilled row, ignores empty confirmation and commits partial turns', async function () {
     await load()
     await open()
     await move(2)
@@ -697,6 +704,7 @@ describe('G2 gesture navigation and dart entry', function () {
     await load()
     await open()
     for (const [value, mult] of [[20, 3], [20, 3], [20, 3], [20, 3], [15, 3]]) await phoneDart(value, mult)
+    await click('[data-act="next"]')
     await lensDart(1, 12)
     await lensDart(5)
     await lensDart(5)
@@ -708,5 +716,304 @@ describe('G2 gesture navigation and dart entry', function () {
     expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledTimes(calls)
     await back()
     expect(lens()).toContain('> 301')
+  })
+})
+
+describe('mixed phone and G2 turns', function () {
+  it('appends staged darts after phone darts and confirms only the available turn slots', async function () {
+    await load()
+    await open()
+    await phoneDart(20)
+    expect(lens()).toContain('> Dart 2: ')
+    await lensDart(2, 1)
+    await lensDart(3)
+    expect(phoneSlots()).toEqual(['20', 'T19', '25'])
+    expect(document.querySelector('.turntotal')!.textContent).toBe('102')
+    expect(document.querySelector('.pscore')!.textContent).toBe('281')
+    expect(lens()).toContain('Dart 1: 20\n  Dart 2: T19\n  Dart 3: 25')
+    expect(lens()).toContain('> Confirm Score')
+    await tap()
+    expect(document.querySelector('.pscore')!.textContent).toBe('199')
+    expect(phoneSlots()).toEqual([])
+    expect(lens()).toContain('Previous Score: 102')
+    expect(lens()).toContain('> Dart 1: ')
+  })
+
+  it('replaces a scored phone dart without scoring its original value twice', async function () {
+    await load()
+    await open()
+    await phoneDart(20)
+    await move(-1)
+    await lensDart(1, 0)
+    expect(document.querySelector('.pscore')!.textContent).toBe('301')
+    expect(phoneSlots()).toEqual(['D20'])
+    await move(3)
+    await tap()
+    expect(document.querySelector('.pscore')!.textContent).toBe('261')
+    expect(lens()).toContain('Previous Score: 40')
+    await click('[data-act="undo"]')
+    expect(document.querySelector('.pscore')!.textContent).toBe('301')
+    expect(phoneSlots()).toEqual([])
+  })
+
+  it('keeps applied darts unchanged until a replacement is chosen and preserves the rest of the draft', async function () {
+    await load()
+    await open()
+    await phoneDart(20)
+    await phoneDart(19)
+    await lensDart(2, 2)
+    await move(-3)
+    await tap()
+    await tap()
+    expect(document.querySelector('.pscore')!.textContent).toBe('262')
+    expect(phoneSlots()).toEqual(['20', '19', 'T18'])
+    await back()
+    await back()
+    expect(document.querySelector('.pscore')!.textContent).toBe('262')
+    expect(phoneSlots()).toEqual(['20', '19', 'T18'])
+    await lensDart(1, 0)
+    expect(document.querySelector('.pscore')!.textContent).toBe('301')
+    expect(phoneSlots()).toEqual(['D20', '19', 'T18'])
+    expect(document.querySelector('.turntotal')!.textContent).toBe('113')
+    await move(3)
+    await tap()
+    expect(document.querySelector('.pscore')!.textContent).toBe('188')
+    expect(lens()).toContain('Previous Score: 113')
+  })
+
+  it('edits a staged row after applied phone darts using its displayed index', async function () {
+    await load()
+    await open()
+    await phoneDart(20)
+    await lensDart(0, 1)
+    await move(-1)
+    await lensDart(1, 1)
+    expect(document.querySelector('.pscore')!.textContent).toBe('281')
+    expect(phoneSlots()).toEqual(['20', 'D19'])
+    expect(document.querySelector('.turntotal')!.textContent).toBe('58')
+    expect(lens()).toContain('> Dart 2: D19')
+    await move(2)
+    await tap()
+    expect(document.querySelector('.pscore')!.textContent).toBe('243')
+    expect(lens()).toContain('Previous Score: 58')
+  })
+
+  it.each(['mult', 'num'])('confirms original phone darts after canceling their G2 %s edit', async function (entry) {
+    await load()
+    await open()
+    await phoneDart(20)
+    await phoneDart(19)
+    await lensDart(2, 2)
+    await move(-3)
+    await tap()
+    await move(1)
+    if (entry === 'num') {
+      await tap()
+      await move(4)
+      await back()
+    }
+    await back()
+    expect(document.querySelector('.pscore')!.textContent).toBe('262')
+    expect(phoneSlots()).toEqual(['20', '19', 'T18'])
+    expect(lens()).toContain('> Dart 1: 20')
+    await move(3)
+    await tap()
+    expect(document.querySelector('.pscore')!.textContent).toBe('208')
+    expect(lens()).toContain('Previous Score: 93')
+    expect(phoneSlots()).toEqual([])
+    await click('[data-act="undo"]')
+    expect(document.querySelector('.pscore')!.textContent).toBe('262')
+    expect(phoneSlots()).toEqual(['20', '19'])
+    expect(lens()).toContain('> Dart 3: ')
+  })
+
+  it('preserves prior Cricket marks when canceling and replacing an applied phone dart', async function () {
+    await load()
+    await open('cricket')
+    await phoneDart(20, 3)
+    await click('[data-act="next"]')
+    await phoneDart(19, 3)
+    await phoneDart(18)
+    await lensDart(2, 3)
+    expect(lens(2)).toBe('18 /\n17\n16\n15\nBull')
+    expect(phoneSlots()).toEqual(['T19', '18', 'T17'])
+    await move(-2)
+    await tap()
+    await tap()
+    await back()
+    await back()
+    expect(lens(2)).toBe('18 /\n17\n16\n15\nBull')
+    expect(phoneSlots()).toEqual(['T19', '18', 'T17'])
+    await lensDart(2, 2)
+    expect(lens(2)).toBe('19\n18\n17\n16\n15\nBull')
+    expect(document.querySelectorAll('.cmark-closed')).toHaveLength(1)
+    expect(phoneSlots()).toEqual(['T19', 'T18', 'T17'])
+    expect(document.querySelector('.turntotal')!.textContent).toBe('162')
+    await move(2)
+    await tap()
+    expect(lens(2)).toBe('16\n15\nBull')
+    expect(document.querySelectorAll('.cmark-closed')).toHaveLength(4)
+    expect(phoneSlots()).toEqual([])
+    await click('[data-act="undo"]')
+    expect(lens(2)).toBe('17\n16\n15\nBull')
+    expect(document.querySelectorAll('.cmark-closed')).toHaveLength(3)
+    expect(phoneSlots()).toEqual(['T19', 'T18'])
+    expect(lens()).toContain('> Dart 3: ')
+  })
+
+  it('edits and completes a turn restored by phone Undo after automatic confirmation', async function () {
+    await load()
+    await open()
+    for (let i = 0; i < 3; i++) await phoneDart(20, 3)
+    await click('[data-act="undo"]')
+    expect(document.querySelector('.pscore')!.textContent).toBe('181')
+    expect(phoneSlots()).toEqual(['T20', 'T20'])
+    expect(lens()).toContain('> Dart 3: ')
+    await move(-1)
+    await lensDart(0, 1)
+    expect(phoneSlots()).toEqual(['T20', '19'])
+    await move(1)
+    await lensDart(2, 2)
+    await tap()
+    expect(document.querySelector('.pscore')!.textContent).toBe('168')
+    expect(lens()).toContain('Previous Score: 133')
+    await click('[data-act="undo"]')
+    expect(document.querySelector('.pscore')!.textContent).toBe('222')
+    expect(phoneSlots()).toEqual(['T20', '19'])
+    expect(lens()).toContain('> Dart 3: ')
+  })
+
+  it.each([
+    ['score', 'num'], ['undo', 'num'], ['next', 'num'],
+    ['score', 'quit'], ['undo', 'quit'], ['next', 'quit'],
+  ])('clears drafts and %s resets the G2 %s screen', async function (action, entry) {
+    await load()
+    await open()
+    await phoneDart(20)
+    await lensDart(2, 1)
+    if (entry === 'num') {
+      await tap()
+      await tap()
+      expect(lens()).toContain('Dart 3: Single')
+    } else {
+      await back()
+      expect(lens()).toContain('Quit game?')
+    }
+    if (action === 'score') {
+      await phoneDart(1)
+    } else {
+      await click('[data-act="' + action + '"]')
+    }
+    const values = action === 'score' ? ['20', '1'] : []
+    const score = action === 'score' ? '280' : action === 'undo' ? '301' : '281'
+    expect(phoneSlots()).toEqual(values)
+    expect(document.querySelector('.pscore')!.textContent).toBe(score)
+    expect(lens()).not.toContain('T19')
+    expect(lens()).not.toContain('Single')
+    expect(lens()).not.toContain('Quit game?')
+    expect(lens()).toContain('> Dart ' + (values.length + 1) + ': ')
+    await move(3)
+    await tap()
+    expect(document.querySelector('.pscore')!.textContent).toBe(score)
+    expect(phoneSlots()).toEqual([])
+  })
+
+  it('mirrors staged checkout changes and edits to the phone without another phone action', async function () {
+    await load()
+    await open()
+    for (let i = 0; i < 3; i++) await phoneDart(20, 3)
+    await lensDart(2, 0)
+    expect(lens(2)).toBe('T19\nD2')
+    expect(document.querySelector('.info-bars')!.textContent).toContain('CheckoutT19 D2')
+    expect(phoneSlots()).toEqual(['T20'])
+    expect(document.querySelector('.turntotal')!.textContent).toBe('60')
+    await move(-1)
+    await lensDart(1, 0)
+    expect(lens(2)).toBe('T19\nD12')
+    expect(document.querySelector('.info-bars')!.textContent).toContain('CheckoutT19 D12')
+    expect(phoneSlots()).toEqual(['D20'])
+    expect(document.querySelector('.turntotal')!.textContent).toBe('40')
+    expect(document.querySelector('.pscore')!.textContent).toBe('121')
+  })
+
+  it.each(['mult', 'num', 'quit'])('shows a phone checkout immediately while G2 is in %s and exits in one double tap', async function (entry) {
+    await load()
+    await open()
+    for (const [value, mult] of [[20, 3], [20, 3], [20, 3], [20, 3], [15, 3]]) await phoneDart(value, mult)
+    if (entry === 'quit') {
+      await lensDart(5)
+      await back()
+      expect(lens()).toContain('Quit game?')
+    } else {
+      await tap()
+      if (entry === 'num') await tap()
+      expect(lens()).toContain('Dart 3:')
+    }
+    await phoneDart(8, 2)
+    expect(document.querySelector('.overlay')).not.toBeNull()
+    expect(lens()).toContain('Game over')
+    expect(lens()).not.toContain('Dart 3:')
+    expect(lens()).not.toContain('Quit game?')
+    expect(lens(2)).toBe('')
+    await back()
+    expect(document.querySelector('.game-list')).not.toBeNull()
+    expect(lens()).toContain('> 301')
+  })
+
+  it('starts a clean rematch after a phone checkout interrupted a G2 draft', async function () {
+    await load()
+    await open()
+    for (const [value, mult] of [[20, 3], [20, 3], [20, 3], [20, 3], [15, 3]]) await phoneDart(value, mult)
+    await lensDart(5)
+    await phoneDart(8, 2)
+    await click('[data-act="rematch"]')
+    expect(document.querySelector('.pscore')!.textContent).toBe('301')
+    expect(phoneSlots()).toEqual([])
+    expect(document.querySelector('.turntotal')!.textContent).toBe('0')
+    expect(lens()).toContain('> Dart 1: \n  Dart 2: \n  Dart 3: ')
+    await lensDart(2, 0)
+    await move(2)
+    await tap()
+    expect(document.querySelector('.pscore')!.textContent).toBe('241')
+    expect(lens()).toContain('Previous Score: 60')
+  })
+})
+
+describe('unchanged control selections', function () {
+  it('does not redraw for a clamped scroll on home or in a game', async function () {
+    await load()
+    let calls = sdk.bridge.textContainerUpgrade.mock.calls.length
+    await move(-1)
+    expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledTimes(calls)
+    await move(1)
+    calls = sdk.bridge.textContainerUpgrade.mock.calls.length
+    await move(1)
+    expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledTimes(calls)
+    await tap()
+    await tap()
+    calls = sdk.bridge.textContainerUpgrade.mock.calls.length
+    await move(-1)
+    expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledTimes(calls)
+    await move(3)
+    calls = sdk.bridge.textContainerUpgrade.mock.calls.length
+    await move(1)
+    expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledTimes(calls)
+  })
+
+  it('keeps the DOM and glasses unchanged when choosing the current multiplier', async function () {
+    await load()
+    await open()
+    const single = document.querySelector('[data-mult="1"]')
+    let calls = sdk.bridge.textContainerUpgrade.mock.calls.length
+    await click('[data-mult="1"]')
+    expect(document.querySelector('[data-mult="1"]')).toBe(single)
+    expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledTimes(calls)
+    await click('[data-mult="2"]')
+    const double = document.querySelector('[data-mult="2"]')
+    calls = sdk.bridge.textContainerUpgrade.mock.calls.length
+    await click('[data-mult="2"]')
+    expect(document.querySelector('[data-mult="2"]')).toBe(double)
+    expect(sdk.bridge.textContainerUpgrade).toHaveBeenCalledTimes(calls)
+    expect(double!.classList).toContain('mbtn-on')
   })
 })
