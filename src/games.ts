@@ -139,7 +139,9 @@ abstract class GameBase<S extends Core> implements Game {
 
   lens(sel: number, pending: Dart[]): string {
     const v = this.view()
-    const p = v.players[0]
+    const p = v.players.find(function (player) {
+      return player.active || player.winner
+    })
     const lines: string[] = []
     if (p && p.primary !== '') {
       lines.push(t('lensCurrentScore') + ': ' + p.primary)
@@ -275,6 +277,7 @@ interface X01State extends Core {
   doubleIn: boolean
   legsTarget: number
   setsTarget: number
+  legStarter: number
   turnStart: number
   turnStartDarts: number
   turnStartScored: number
@@ -298,6 +301,7 @@ class X01Game extends GameBase<X01State> {
       doubleIn: cfg.doubleIn,
       legsTarget: cfg.legsTarget,
       setsTarget: cfg.setsTarget,
+      legStarter: 0,
       turnStart: cfg.start,
       turnStartDarts: 0,
       turnStartScored: 0,
@@ -323,7 +327,7 @@ class X01Game extends GameBase<X01State> {
         counts = false
       }
     }
-    s.turn.push(d)
+    s.turn.push({ ...d })
     p.dartsUsed += 1
     if (!counts) {
       this.afterDart()
@@ -345,7 +349,7 @@ class X01Game extends GameBase<X01State> {
     if (bust) {
       s.message = t('bust')
       p.score = s.turnStart
-      p.dartsUsed = s.turnStartDarts
+      p.dartsUsed = s.turnStartDarts + 3
       p.scored = s.turnStartScored
       this.commitTurn()
       s.lastTurnBust = true
@@ -390,6 +394,8 @@ class X01Game extends GameBase<X01State> {
     if (p.legs >= s.legsTarget) {
       p.sets += 1
       if (p.sets >= s.setsTarget) {
+        s.turnStartDarts = p.dartsUsed
+        s.turnStartScored = p.scored
         s.finished = true
         s.winner = s.active
         return
@@ -401,8 +407,11 @@ class X01Game extends GameBase<X01State> {
     for (const pl of s.players) {
       pl.score = s.start
       pl.in = !s.doubleIn
+      pl.dartsUsed = 0
+      pl.scored = 0
     }
-    s.active = (s.active + 1) % s.players.length
+    s.legStarter = (s.legStarter + 1) % s.players.length
+    s.active = s.legStarter
     s.turnStart = s.players[s.active].score
     s.turnStartDarts = s.players[s.active].dartsUsed
     s.turnStartScored = s.players[s.active].scored
@@ -445,7 +454,7 @@ class X01Game extends GameBase<X01State> {
       message: s.message,
       layout: 'score',
       turn: turnSlots(s.turn),
-      turnTotal: turnTotal(s.turn),
+      turnTotal: s.players[s.active].scored - s.turnStartScored,
       finished: s.finished,
       winner: s.winner,
       players,
@@ -459,15 +468,27 @@ class X01Game extends GameBase<X01State> {
     if (s.finished || !s.doubleOut) {
       return undefined
     }
-    let score = s.players[s.active].score
+    const dartsLeft = 3 - s.turn.length - pending.length
+    if (dartsLeft <= 0) {
+      return undefined
+    }
+    const p = s.players[s.active]
+    let score = p.score
+    let inGame = p.in
     for (const d of pending) {
+      if (!inGame) {
+        if (d.mult !== 2) {
+          continue
+        }
+        inGame = true
+      }
       score -= dartScore(d)
     }
-    if (score < 2 || score > 170) {
+    if (!inGame || score < 2 || score > 170) {
       return undefined
     }
     const route = findCheckout(score)
-    if (!route) {
+    if (!route || route.length > dartsLeft) {
       return undefined
     }
     return route
@@ -518,7 +539,7 @@ class CricketGame extends GameBase<CricketState> {
       }
       players.push({ marks, score: 0 })
     }
-    super({ ...newCore(), names, numbers: cfg.numbers, scoring: cfg.scoring, players })
+    super({ ...newCore(), names, numbers: cfg.numbers.slice(), scoring: cfg.scoring, players })
   }
 
   private idxOf(value: number): number {
@@ -532,7 +553,7 @@ class CricketGame extends GameBase<CricketState> {
     }
     this.save()
     s.message = ''
-    s.turn.push(d)
+    s.turn.push({ ...d })
     const idx = this.idxOf(d.value)
     if (idx >= 0) {
       const p = s.players[s.active]
@@ -620,7 +641,7 @@ class CricketGame extends GameBase<CricketState> {
       finished: s.finished,
       winner: s.winner,
       players,
-      numbers: s.numbers,
+      numbers: s.numbers.slice(),
     }
   }
 }

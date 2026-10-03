@@ -13,6 +13,10 @@ function T(n: number): Dart {
 }
 const MISS: Dart = { value: 0, mult: 1 }
 
+function segmentScore(d: Dart): number {
+  return d.value === 25 ? (d.mult === 1 ? 25 : 50) : d.value * d.mult
+}
+
 function play(g: Game, darts: Dart[]): void {
   for (const d of darts) {
     g.applyDart(d)
@@ -28,10 +32,15 @@ function make(id: string, players: string[], opts: Record<string, string> = {}):
 }
 
 describe('dart scoring', function () {
-  it('scores singles, doubles, triples and bull', function () {
-    expect(dartScore(S(20))).toBe(20)
-    expect(dartScore(D(20))).toBe(40)
-    expect(dartScore(T(20))).toBe(60)
+  it('scores every numbered single, double and triple', function () {
+    for (let value = 1; value <= 20; value++) {
+      for (const mult of [1, 2, 3]) {
+        expect(dartScore({ value, mult }), String(value) + 'x' + mult).toBe(value * mult)
+      }
+    }
+  })
+
+  it('scores bulls and misses', function () {
     expect(dartScore({ value: 25, mult: 1 })).toBe(25)
     expect(dartScore({ value: 25, mult: 2 })).toBe(50)
     expect(dartScore(MISS)).toBe(0)
@@ -43,7 +52,7 @@ describe('checkout solver', function () {
     const r = findCheckout(40)
     expect(r).not.toBeNull()
     expect(r!.length).toBe(1)
-    expect(dartScore(r![0])).toBe(40)
+    expect(segmentScore(r![0])).toBe(40)
   })
 
   it('always finishes on a double', function () {
@@ -52,7 +61,7 @@ describe('checkout solver', function () {
     expect(r![r!.length - 1].mult).toBe(2)
     let sum = 0
     for (const d of r!) {
-      sum += dartScore(d)
+      sum += segmentScore(d)
     }
     expect(sum).toBe(170)
   })
@@ -116,16 +125,17 @@ describe('X01', function () {
     expect(base).not.toBeUndefined()
     let baseSum = 0
     for (const d of base!) {
-      baseSum += dartScore(d)
+      baseSum += segmentScore(d)
     }
     expect(baseSum).toBe(121)
-    const after = g.checkoutFor([D(8)])
+    expect(g.checkoutFor([D(8)])).toBeUndefined()
+    const after = g.checkoutFor([T(20)])
     expect(after).not.toBeUndefined()
     let afterSum = 0
     for (const d of after!) {
-      afterSum += dartScore(d)
+      afterSum += segmentScore(d)
     }
-    expect(afterSum).toBe(105)
+    expect(afterSum).toBe(61)
     expect(g.checkoutFor([D(8), T(20), T(20)])).toBeUndefined()
     play(g, [D(8), T(20), T(20)])
     expect(g.view().players[0].primary).toBe('121')
@@ -133,7 +143,7 @@ describe('X01', function () {
     expect(g.checkoutFor([])).toEqual(base)
   })
 
-  it('shows BUST as the previous score and leaves it out of the average', function () {
+  it('shows BUST as the previous score and counts a zero-point visit in the average', function () {
     const g = make('301', ['A'])
     play(g, [T(20), T(20), T(20)])
     expect(g.view().average).toBe('180.0')
@@ -141,7 +151,7 @@ describe('X01', function () {
     const v = g.view()
     expect(v.message).toContain('BUST')
     expect(v.previous).toBe('BUST')
-    expect(v.average).toBe('180.0')
+    expect(v.average).toBe('90.0')
   })
 })
 
@@ -302,17 +312,17 @@ describe('checkout routes', function () {
     for (let n = 1; n <= 20; n++) segments.push(S(n), D(n), T(n))
     const doubles = segments.filter(d => d.mult === 2)
     const shortest = new Map<number, number>()
-    for (const last of doubles) shortest.set(dartScore(last), 1)
+    for (const last of doubles) shortest.set(segmentScore(last), 1)
     for (const first of segments) {
       for (const last of doubles) {
-        const score = dartScore(first) + dartScore(last)
+        const score = segmentScore(first) + segmentScore(last)
         if (!shortest.has(score)) shortest.set(score, 2)
       }
     }
     for (const first of segments) {
       for (const second of segments) {
         for (const last of doubles) {
-          const score = dartScore(first) + dartScore(second) + dartScore(last)
+          const score = segmentScore(first) + segmentScore(second) + segmentScore(last)
           if (!shortest.has(score)) shortest.set(score, 3)
         }
       }
@@ -324,7 +334,7 @@ describe('checkout routes', function () {
       } else {
         expect(route, String(score)).not.toBeNull()
         expect(route!.length, String(score)).toBe(shortest.get(score))
-        expect(route!.reduce((sum, d) => sum + dartScore(d), 0)).toBe(score)
+        expect(route!.reduce((sum, d) => sum + segmentScore(d), 0)).toBe(score)
         expect(route!.at(-1)!.mult).toBe(2)
         for (const dart of route!) expect(segments).toContainEqual(dart)
       }
@@ -378,7 +388,7 @@ describe('X01 options and match progression', function () {
   it.each(['on', 'off'])('rolls back an overshoot with double-out %s', function (doubleOut) {
     const g = make('301', ['A'], { doubleOut })
     play(g, [T(20), T(20), T(20), T(20), T(19), D(8)])
-    expect(g.view()).toMatchObject({ previous: 'BUST', average: '180.0', turn: [] })
+    expect(g.view()).toMatchObject({ previous: 'BUST', average: '90.0', turn: [] })
     expect(g.view().players[0].primary).toBe('121')
     g.undo()
     expect(g.view().players[0].primary).toBe('4')
@@ -430,9 +440,187 @@ describe('X01 options and match progression', function () {
   it('does not suggest routes for high, bust, or bogey scores', function () {
     const g = make('301', ['A'])
     expect(g.checkoutFor([])).toBeUndefined()
-    expect(g.checkoutFor([T(20), T(20), S(12)])).toBeUndefined()
-    expect(g.checkoutFor([T(20), T(20), T(20), T(20), T(20)])).toBeUndefined()
-    expect(g.checkoutFor([T(20), T(20), T(20), T(20), T(20), D(20)])).toBeUndefined()
+    play(g, [T(20), T(20), S(12)])
+    expect(g.checkoutFor([])).toBeUndefined()
+    play(g, [T(20), T(19), S(12)])
+    expect(g.checkoutFor([T(20)])).toBeUndefined()
+    expect(g.checkoutFor([T(20), T(20), T(20), T(20)])).toBeUndefined()
+  })
+})
+
+describe('X01 leg statistics and starters', function () {
+  it.each([
+    { checkoutDarts: 1, darts: [T(20), T(20), T(20), T(19), S(20), S(4), D(20)], average: '129.0', previous: '40' },
+    { checkoutDarts: 2, darts: [T(20), T(20), T(20), T(20), S(19), MISS, S(2), D(20)], average: '112.9', previous: '42' },
+    { checkoutDarts: 3, darts: [T(20), T(20), T(20), T(20), T(15), D(8)], average: '150.5', previous: '121' },
+  ])('includes a $checkoutDarts-dart checkout in the final average', function ({ checkoutDarts, darts, average, previous }) {
+    const g = make('301', ['A'])
+    play(g, darts)
+    expect(g.view()).toMatchObject({ finished: true, winner: 0, average, previous, turn: [], turnTotal: 0 })
+    g.undo()
+    expect(g.view().finished).toBe(false)
+    expect(g.view().turn).toHaveLength(checkoutDarts - 1)
+    g.applyDart(darts.at(-1)!)
+    expect(g.view()).toMatchObject({ finished: true, average, previous })
+  })
+
+  it.each([{ legs: '3', sets: '1' }, { legs: '1', sets: '2' }])('starts fresh statistics at the next leg with %o', function (opts) {
+    const g = make('301', ['A'], opts)
+    play(g, [T(20), T(20), T(20), T(20), T(15), D(8)])
+    expect(g.view()).toMatchObject({ finished: false, average: '0.0', turnTotal: 0 })
+    expect(g.view().players[0].primary).toBe('301')
+    play(g, [MISS, MISS, MISS])
+    expect(g.view().average).toBe('0.0')
+    play(g, [T(20), T(20), T(20)])
+    expect(g.view().average).toBe('90.0')
+  })
+
+  it.each([{ legs: '3', sets: '1' }, { legs: '1', sets: '2' }])('resets every player at a leg boundary with %o', function (opts) {
+    const g = make('301', ['A', 'B'], opts)
+    play(g, [T(20), T(20), T(20), S(20), S(20), S(20), T(20), T(15), D(8)])
+    expect(g.view().players.map(p => p.primary)).toEqual(['301', '301'])
+    expect(g.view().players[1].active).toBe(true)
+    expect(g.view().average).toBe('0.0')
+    play(g, [MISS, MISS, MISS])
+    expect(g.view().players[0].active).toBe(true)
+    expect(g.view().average).toBe('0.0')
+    g.undo()
+    expect(g.view().players[1].active).toBe(true)
+    expect(g.view().turn).toHaveLength(2)
+  })
+
+  it.each([
+    { bustDart: 1, scored: [T(20), T(20), T(20), T(19), S(20), S(4)], bust: [T(20)], score: '40', average: '87.0', before: '130.5' },
+    { bustDart: 2, scored: [T(20), T(20), T(20)], bust: [T(20), T(20)], score: '121', average: '90.0', before: '180.0' },
+    { bustDart: 3, scored: [T(20), T(20), T(20)], bust: [T(20), T(19), D(8)], score: '121', average: '90.0', before: '180.0' },
+  ])('counts a dart-$bustDart bust as three darts without its points', function ({ bustDart, scored, bust, score, average, before }) {
+    const g = make('301', ['A'])
+    play(g, scored)
+    expect(g.view().average).toBe(before)
+    play(g, bust)
+    expect(g.view()).toMatchObject({ previous: 'BUST', average, turn: [], turnTotal: 0 })
+    expect(g.view().players[0].primary).toBe(score)
+    g.undo()
+    expect(g.view().turn).toHaveLength(bustDart - 1)
+    expect(g.view().average).toBe(before)
+    g.applyDart(bust.at(-1)!)
+    expect(g.view()).toMatchObject({ previous: 'BUST', average })
+  })
+
+  it('includes a busted visit and the checkout in the completed leg average', function () {
+    const g = make('301', ['A'])
+    play(g, [T(20), T(20), T(20), T(20), T(19), D(8), T(20), T(15), D(8)])
+    expect(g.view()).toMatchObject({ finished: true, previous: '121', average: '100.3', turnTotal: 0 })
+  })
+
+  it.each(['A', 'B'])('alternates leg starters when %s wins the opening leg', function (winner) {
+    const g = make('301', ['A', 'B'], { legs: '3' })
+    if (winner === 'B') play(g, [MISS, MISS, MISS])
+    play(g, [T(20), T(20), T(20), MISS, MISS, MISS, T(20), T(15), D(8)])
+    expect(g.view().players[1].active).toBe(true)
+    play(g, [T(20), T(20), T(20), MISS, MISS, MISS, T(20), T(15), D(8)])
+    expect(g.view().players[0].active).toBe(true)
+    g.undo()
+    expect(g.view().players[1].active).toBe(true)
+    expect(g.view().players[1].primary).toBe('16')
+    g.applyDart(D(8))
+    expect(g.view().players[0].active).toBe(true)
+  })
+})
+
+describe('X01 checkout previews and opening scores', function () {
+  it('limits staged routes to the darts left in the turn', function () {
+    const g = make('301', ['A'])
+    play(g, [T(20), T(20), T(20)])
+    expect(g.checkoutFor([D(8)])).toBeUndefined()
+    expect(g.checkoutFor([T(20)])).toEqual([T(19), D(2)])
+    expect(g.checkoutFor([T(19), D(12)])).toEqual([D(20)])
+    expect(g.checkoutFor([S(1), S(20), S(20)])).toBeUndefined()
+    expect(g.checkoutFor([T(20), T(20)])).toBeUndefined()
+  })
+
+  it('counts both applied and pending darts toward a route budget', function () {
+    const g = make('301', ['A'])
+    play(g, [T(20), T(20), T(20), S(1), D(8)])
+    expect(g.checkoutFor([])).toBeUndefined()
+    expect(g.checkoutFor([MISS])).toBeUndefined()
+    g.undo()
+    g.undo()
+    g.applyDart(T(19))
+    expect(g.checkoutFor([])).toEqual([T(20), D(2)])
+    expect(g.checkoutFor([D(12)])).toEqual([D(20)])
+    g.applyDart(D(12))
+    expect(g.checkoutFor([])).toEqual([D(20)])
+    expect(g.checkoutFor([MISS])).toBeUndefined()
+  })
+
+  it('projects pending double-in darts without changing the game', function () {
+    const g = make('301', ['A'], { doubleIn: 'on' })
+    const initial = g.view()
+    expect(g.checkoutFor([])).toBeUndefined()
+    expect(g.checkoutFor([S(20)])).toBeUndefined()
+    expect(g.checkoutFor([S(20), D(25)])).toBeUndefined()
+    expect(g.checkoutFor([D(25), T(20)])).toBeUndefined()
+    expect(g.checkoutFor([T(20), T(20), T(20)])).toBeUndefined()
+    expect(g.view()).toEqual(initial)
+    play(g, [S(20), T(20), D(20), T(20), T(20), MISS])
+    const opened = g.view()
+    expect(g.checkoutFor([T(20)])).toEqual([T(19), D(12)])
+    expect(g.view()).toEqual(opened)
+  })
+
+  it('reports only scored darts in a double-in turn total', function () {
+    const g = make('301', ['A'], { doubleIn: 'on' })
+    g.applyDart(S(20))
+    expect(g.view()).toMatchObject({ turnTotal: 0, average: '0.0' })
+    expect(g.view().players[0].primary).toBe('301')
+    g.applyDart(D(20))
+    expect(g.view().turnTotal).toBe(40)
+    expect(g.view().players[0].primary).toBe('261')
+    g.applyDart(T(20))
+    expect(g.view()).toMatchObject({ turnTotal: 0, previous: '100', average: '100.0' })
+    g.undo()
+    expect(g.view()).toMatchObject({ turnTotal: 40, average: '0.0' })
+  })
+})
+
+describe('engine input and view ownership', function () {
+  it.each(['301', 'cricket'])('copies darts applied to %s', function (id) {
+    const g = make(id, ['A'])
+    const dart = T(20)
+    g.applyDart(dart)
+    const before = g.view()
+    dart.value = 1
+    dart.mult = 1
+    expect(g.view()).toEqual(before)
+    g.applyDart(D(19))
+    g.undo()
+    expect(g.view()).toEqual(before)
+  })
+
+  it.each(['cricket', 'noscore', 'tactics', 'random'])('returns independent target arrays for %s', function (id) {
+    const g = make(id, ['A'])
+    const targets = g.view().numbers!
+    const before = targets.slice()
+    targets.reverse()
+    targets[0] = 1
+    targets.push(0)
+    expect(g.view().numbers).toEqual(before)
+    g.applyDart(T(before[0]))
+    expect(g.view().players[0].marks![0]).toBe(3)
+  })
+
+  it('isolates target arrays across existing and future standard games', function () {
+    const first = make('cricket', ['A'])
+    const existing = make('noscore', ['B'])
+    first.view().numbers![0] = 1
+    const later = make('cricket', ['C'])
+    const targets = [20, 19, 18, 17, 16, 15, 25]
+    for (const g of [first, existing, later]) {
+      expect(g.view().numbers).toEqual(targets)
+      g.applyDart(T(20))
+      expect(g.view().players[0].marks![0]).toBe(3)
+    }
   })
 })
 
@@ -501,6 +689,25 @@ describe('Cricket state and history', function () {
 })
 
 describe('lens scoreboard', function () {
+  it('shows the active X01 player and the winner after the match', function () {
+    const g = make('301', ['A', 'B'])
+    g.applyDart(S(20))
+    g.commitTurn()
+    expect(g.lens(0, [])).toContain('Current Score: 301\n')
+    play(g, [T(20), T(20), T(20), MISS, MISS, MISS, T(20), T(15), D(8)])
+    expect(g.view().winner).toBe(1)
+    expect(g.lens(0, [])).toContain('Current Score: 0\n')
+    expect(g.lens(0, [])).toContain('Leg Average: 150.5\n\nGame over')
+  })
+
+  it('shows the active Cricket player score', function () {
+    const g = make('cricket', ['A', 'B'])
+    play(g, [T(20), T(20), T(20)])
+    expect(g.lens(0, [])).toContain('Current Score: 0\n')
+    play(g, [T(19), T(19)])
+    expect(g.lens(0, [])).toContain('Current Score: 57\n')
+  })
+
   it('shows committed score, previous turn and average alongside staged darts', function () {
     const g = make('301', ['A'])
     play(g, [T(20), T(20), T(20)])
