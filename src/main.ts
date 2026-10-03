@@ -4,7 +4,9 @@ import {
   CreateStartUpPageContainer,
   TextContainerUpgrade,
   OsEventTypeList,
+  pickLoose,
 } from '@evenrealities/even_hub_sdk'
+import type { EvenHubEvent } from '@evenrealities/even_hub_sdk'
 import { t } from './i18n'
 import type { StringKey } from './i18n'
 import type { Category, GameDef, Game, GameView, PlayerView } from './games'
@@ -56,46 +58,80 @@ const panel = new TextContainerProperty({
   isEventCapture: 0,
 })
 
-const created = await bridge.createStartUpPageContainer(
-  new CreateStartUpPageContainer({ containerTotalNum: 2, textObject: [body, panel] }),
-)
-if (created !== 0) {
-  console.error('createStartUpPageContainer failed:', created)
+let lensAvailable = false
+try {
+  const created = await bridge.createStartUpPageContainer(
+    new CreateStartUpPageContainer({ containerTotalNum: 2, textObject: [body, panel] }),
+  )
+  if (created === 0) {
+    lensAvailable = true
+  } else {
+    console.error('createStartUpPageContainer failed:', created)
+  }
+} catch (error) {
+  console.error('createStartUpPageContainer failed:', error)
 }
 
-let rendering: Promise<unknown> = Promise.resolve()
+let rendering: Promise<void> = Promise.resolve()
 function drawLens(text: string) {
-  rendering = rendering.then(function () {
-    return bridge.textContainerUpgrade(
-      new TextContainerUpgrade({ containerID: BODY.id, containerName: BODY.name, content: text }),
-    )
+  if (!lensAvailable) {
+    return
+  }
+  const updates = [
+    new TextContainerUpgrade({ containerID: BODY.id, containerName: BODY.name, content: text }),
+    new TextContainerUpgrade({ containerID: PANEL.id, containerName: PANEL.name, content: panelContent() }),
+  ]
+  rendering = rendering.then(async function () {
+    for (const update of updates) {
+      if (!lensAvailable) {
+        return
+      }
+      if (!await bridge.textContainerUpgrade(update)) {
+        console.error('textContainerUpgrade failed:', update.containerName)
+        return
+      }
+    }
+  }).catch(function (error) {
+    console.error('textContainerUpgrade failed:', error)
   })
-  const side = panelContent()
-  rendering = rendering.then(function () {
-    return bridge.textContainerUpgrade(
-      new TextContainerUpgrade({ containerID: PANEL.id, containerName: PANEL.name, content: side }),
-    )
-  })
+}
+
+async function requestLensShutdown() {
+  try {
+    if (!await bridge.shutDownPageContainer(1)) {
+      console.error('shutDownPageContainer failed:', false)
+    }
+  } catch (error) {
+    console.error('shutDownPageContainer failed:', error)
+  }
+}
+
+function lensEventType(event: EvenHubEvent, kind: 'sysEvent' | 'textEvent'): number | null {
+  const item = event[kind]
+  if (!item) {
+    return null
+  }
+  return OsEventTypeList.fromJson(
+    item.eventType ?? pickLoose(event.jsonData, 'eventType') ?? OsEventTypeList.CLICK_EVENT,
+  ) ?? null
 }
 
 const unsubscribe = bridge.onEvenHubEvent(function (event) {
-  let sysType: number | null = null
-  if (event.sysEvent) {
-    if (event.sysEvent.eventType === undefined || event.sysEvent.eventType === null) {
-      sysType = OsEventTypeList.CLICK_EVENT
-    } else {
-      sysType = event.sysEvent.eventType
-    }
+  const sysType = lensEventType(event, 'sysEvent')
+  const textType = lensEventType(event, 'textEvent')
+
+  if (sysType === OsEventTypeList.SYSTEM_EXIT_EVENT || sysType === OsEventTypeList.ABNORMAL_EXIT_EVENT) {
+    lensAvailable = false
+    unsubscribe()
+    return
   }
-  let textType: number | null = null
-  if (event.textEvent && event.textEvent.eventType !== undefined && event.textEvent.eventType !== null) {
-    textType = event.textEvent.eventType
+  if (!lensAvailable) {
+    return
   }
 
   if (sysType === OsEventTypeList.DOUBLE_CLICK_EVENT || textType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
     if (!backLens()) {
-      unsubscribe()
-      bridge.shutDownPageContainer(1)
+      void requestLensShutdown()
     }
     return
   }
@@ -107,12 +143,8 @@ const unsubscribe = bridge.onEvenHubEvent(function (event) {
     moveLens(1)
     return
   }
-  if (sysType === OsEventTypeList.CLICK_EVENT) {
+  if (sysType === OsEventTypeList.CLICK_EVENT || textType === OsEventTypeList.CLICK_EVENT) {
     selectLens()
-    return
-  }
-  if (sysType === OsEventTypeList.SYSTEM_EXIT_EVENT || sysType === OsEventTypeList.ABNORMAL_EXIT_EVENT) {
-    unsubscribe()
   }
 })
 
