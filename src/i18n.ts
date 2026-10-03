@@ -1,9 +1,3 @@
-export type Lang = 'en'
-
-export const LANGS: { code: Lang; label: string }[] = [
-  { code: 'en', label: 'English' },
-]
-
 const en = {
   appTitle: 'Darts',
   tagline: 'Pick a mode and start throwing',
@@ -15,13 +9,6 @@ const en = {
 
   back: 'Back',
   home: 'Home',
-  players: 'Players',
-  player: 'Player',
-  addPlayer: 'Add player',
-  start: 'Start',
-  options: 'Options',
-  on: 'On',
-  off: 'Off',
 
   optDoubleOut: 'Double out',
   optDoubleIn: 'Double in',
@@ -47,26 +34,17 @@ const en = {
   next: 'Next',
 
   left: 'Left',
-  score: 'Score',
-  darts: 'Darts',
   bust: 'BUST',
   out: 'OUT',
   checkout: 'Checkout',
-  noCheckout: 'No checkout',
 
   gameOver: 'Game over',
-  wins: 'wins',
-  rematch: 'Rematch',
   playAgain: 'Play again',
   backToModes: 'Back to Gamemode selection',
   quitTitle: 'Quit game?',
   quitWarning: "You'll lose progress",
   resume: 'Resume',
   quit: 'Quit',
-  standings: 'Standings',
-  bestOf: 'Best of',
-  avgPerDart: 'Avg / dart',
-  avgPerTurn: 'Avg / turn',
 
   startBull: 'Hit a double to start',
 
@@ -91,18 +69,6 @@ const en = {
 
 export type StringKey = keyof typeof en
 
-const STRINGS: Record<Lang, Record<StringKey, string>> = { en }
-
-let current: Lang = 'en'
-
-export function getLang(): Lang {
-  return current
-}
-
-export function setLang(lang: Lang): void {
-  current = lang
-}
-
 export function t(key: StringKey): string {
-  return STRINGS[current][key]
+  return en[key]
 }

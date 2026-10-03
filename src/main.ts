@@ -214,7 +214,7 @@ function lensMarkSymbol(m: number): string {
 
 function numberLabel(n: number): string {
   if (n === 25) {
-    return 'Bull'
+    return t('bullEye')
   }
   return String(n)
 }
@@ -883,7 +883,7 @@ function renderGame() {
     '<header class="topbar"><button class="icon-btn" data-act="back"><span class="btn-ico">' + chevronLeftIcon + '</span>' + esc(t('back')) + '</button>' +
     '<div class="title">' + esc(v.title) + '</div>' +
     '<button class="icon-btn" data-act="undo"><span class="btn-ico">' + undoIcon + '</span>' + esc(t('undo')) + '</button></header>' +
-    (v.hint ? '<div class="hint">' + esc(v.hint) + '</div>' : '<div class="hint hint-empty"></div>') +
+    '<div class="hint">' + esc(v.hint) + '</div>' +
     '<div class="board-wrap">' + scoreBoard(v) + infoBars(v) + '</div>' +
     (v.message ? '<div class="toast">' + esc(v.message) + '</div>' : '') +
     turnBar(v) +

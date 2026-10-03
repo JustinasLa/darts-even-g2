@@ -25,15 +25,15 @@ export function dartLabel(d: Dart): string {
   }
   if (d.value === 25) {
     if (d.mult >= 2) {
-      return 'Bull'
+      return t('bullEye')
     }
-    return '25'
+    return t('bull')
   }
   let prefix = ''
   if (d.mult === 3) {
-    prefix = 'T'
+    prefix = t('triple')
   } else if (d.mult === 2) {
-    prefix = 'D'
+    prefix = t('double')
   }
   return prefix + d.value
 }

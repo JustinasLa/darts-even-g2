@@ -1,21 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { getLang, LANGS, setLang, t } from './i18n'
+import { describe, expect, it } from 'vitest'
+import { t } from './i18n'
 import { GAMES } from './games'
 
-afterEach(function () {
-  setLang('en')
-})
-
 describe('localisation', function () {
-  it('defaults to English and supports the advertised language', function () {
-    expect(getLang()).toBe('en')
-    expect(LANGS).toEqual([{ code: 'en', label: 'English' }])
-    for (const language of LANGS) {
-      setLang(language.code)
-      expect(getLang()).toBe(language.code)
-      expect(t('appTitle')).toBe('Darts')
-      expect(t('gameOver')).toBe('Game over')
-    }
+  it('provides English app and dart-entry labels', function () {
+    expect(t('appTitle')).toBe('Darts')
+    expect(t('gameOver')).toBe('Game over')
+    expect(t('single')).toBe('S')
+    expect(t('double')).toBe('D')
+    expect(t('triple')).toBe('T')
+    expect(t('miss')).toBe('Miss')
+    expect(t('bull')).toBe('25')
+    expect(t('bullEye')).toBe('Bull')
   })
 
   it('provides names, descriptions and option labels for every game', function () {
