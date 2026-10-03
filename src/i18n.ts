@@ -37,6 +37,10 @@ const en = {
   bust: 'BUST',
   out: 'OUT',
   checkout: 'Checkout',
+  cricketNoMarks: '0 marks',
+  cricketOneMark: '1 mark',
+  cricketTwoMarks: '2 marks',
+  cricketClosed: 'Closed',
 
   gameOver: 'Game over',
   playAgain: 'Play again',
