@@ -55,10 +55,12 @@ npm run simulate   # terminal 2: glasses simulator + phone frame (provides the b
 
 ```bash
 npm run build
-npm test
+npm run test:coverage
 ```
 
-The build (type-check + bundle) and the test suite must pass clean.
+The build (type-check + bundle) and the test suite must pass clean. Coverage must
+remain at 100% statements, branches, functions and lines for each application
+TypeScript file. The HTML report is generated at `coverage/index.html`.
 
 ## 6. Commit, push, and open a pull request
 
@@ -113,7 +115,9 @@ Keep changes consistent with the existing code:
   phone keypad UI.
 - `src/games.ts` - game engine: X01 + Cricket rules, scoring, checkout finder.
 - `src/games.test.ts` - Vitest suite for the scoring and checkout logic.
+- `src/main.test.ts` - phone UI and G2 integration tests using a mocked SDK transport.
 - `src/i18n.ts` - localisation string table.
+- `src/i18n.test.ts` - language and game-string tests.
 
 Darts runs entirely on-device: no proxy, no API key, no network permissions.
 If you're planning a larger change, open an issue first to discuss it before
