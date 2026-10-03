@@ -113,8 +113,9 @@ Keep changes consistent with the existing code:
 
 - `src/main.ts` - SDK bridge (glasses lens score entry + side panel) plus the
   phone keypad UI.
-- `src/games.ts` - game engine: X01 + Cricket rules, scoring, checkout finder.
+- `src/games.ts` - game engine: X01, Cricket and Practice rules, scoring, checkout finder.
 - `src/games.test.ts` - Vitest suite for the scoring and checkout logic.
+- `src/practice.test.ts` - Practice scoring, rounds, winners, undo and draft previews.
 - `src/main.test.ts` - phone UI and G2 integration tests using a mocked SDK transport.
 - `src/i18n.ts` - localisation string table.
 - `src/i18n.test.ts` - translation and game-string tests.

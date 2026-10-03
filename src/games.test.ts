@@ -585,6 +585,84 @@ describe('X01 checkout previews and opening scores', function () {
 })
 
 describe('engine input and view ownership', function () {
+  it.each(['301', '501', '701', '901'])('previews one combined, capped visit for %s without changing scores or history', function (id) {
+    const g = make(id, ['A', 'B'])
+    const initial = g.view()
+    g.applyDart(T(20))
+    const before = g.view()
+    const pending = [D(19), S(18), T(17)]
+    const preview = g.view(pending)
+    expect(preview.turn.map(slot => slot.label)).toEqual(['T20', 'D19', '18'])
+    expect(preview.turnTotal).toBe(116)
+    expect(preview.players).toEqual(before.players)
+    expect(preview.average).toBe(before.average)
+    expect(preview.previous).toBe(before.previous)
+    pending[0].value = 1
+    expect(preview.turn[1]).toEqual({ label: 'D19', score: 38 })
+    preview.turn[0].score = 999
+    preview.players[0].primary = '999'
+    expect(g.view()).toEqual(before)
+    expect(g.currentTurn()).toEqual([T(20)])
+    g.undo()
+    expect(g.view()).toEqual(initial)
+  })
+
+  it.each([
+    { applied: [], pending: [S(20), T(20), D(20)], total: 40 },
+    { applied: [S(20)], pending: [T(20), D(20), T(20)], total: 40 },
+    { applied: [S(20), D(20)], pending: [T(20), S(1)], total: 100 },
+    { applied: [D(20)], pending: [T(20), T(20)], total: 160 },
+    { applied: [S(20)], pending: [T(20), S(20)], total: 0 },
+  ])('counts only opened scoring darts in a double-in draft with %o', function ({ applied, pending, total }) {
+    const g = make('301', ['A'], { doubleIn: 'on' })
+    const initial = g.view()
+    play(g, applied)
+    const before = g.view()
+    const preview = g.view(pending)
+    expect(preview.turnTotal).toBe(total)
+    expect(preview.turn).toHaveLength(3)
+    expect(preview.players).toEqual(before.players)
+    expect(preview).toMatchObject({ average: '0.0', previous: '0', finished: false })
+    expect(g.view()).toEqual(before)
+    for (let dart = 0; dart < applied.length; dart++) g.undo()
+    expect(g.view()).toEqual(initial)
+  })
+
+  it.each(['cricket', 'noscore', 'tactics', 'random'])('keeps %s draft rows separate from recorded marks and scores', function (id) {
+    const g = make(id, ['A', 'B'])
+    const initial = g.view()
+    g.applyDart(T(20))
+    const before = g.view()
+    const pending = [D(20), S(14), D(25)]
+    const preview = g.view(pending)
+    expect(preview.turn.map(slot => slot.label)).toEqual(['T20', 'D20', '14'])
+    expect(preview.turnTotal).toBe(114)
+    expect(preview.players).toEqual(before.players)
+    expect(g.lens(3, pending)).toContain('Dart 1: T20\n  Dart 2: D20\n  Dart 3: 14')
+    pending[0].mult = 3
+    expect(preview.turn[1]).toEqual({ label: 'D20', score: 40 })
+    preview.players[0].marks![0] = 99
+    preview.numbers![0] = 0
+    preview.turn[0].score = 999
+    expect(g.view()).toEqual(before)
+    g.undo()
+    expect(g.view()).toEqual(initial)
+  })
+
+  it.each(['301', 'cricket', 'noscore'])('ignores pending darts after a %s win', function (id) {
+    const g = make(id, ['A'])
+    if (id === '301') {
+      play(g, [T(20), T(20), T(20), T(20), T(15), D(8)])
+    } else {
+      play(g, [T(20), T(19), T(18), T(17), T(16), T(15), S(25), S(25), MISS, S(25)])
+      expect(g.view().turn).toHaveLength(1)
+    }
+    const finished = g.view()
+    expect(finished.finished).toBe(true)
+    expect(g.view([T(20), D(25), S(1)])).toEqual(finished)
+    expect(g.view()).toEqual(finished)
+  })
+
   it.each(['301', 'cricket'])('copies darts applied to %s', function (id) {
     const g = make(id, ['A'])
     const dart = T(20)

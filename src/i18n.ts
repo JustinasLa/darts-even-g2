@@ -4,8 +4,15 @@ const en = {
 
   catX01: 'X01',
   catCricket: 'Cricket',
+  catPractice: 'Practice',
   catX01Blurb: 'Count down to zero',
   catCricketBlurb: 'Close numbers, rack up points',
+  catPracticeBlurb: 'Targets, rounds and scoring drills',
+  target: 'Target',
+  targetsHit: 'Targets hit',
+  round: 'Round',
+  draw: 'Draw',
+  clockRule: 'Hit 1–20 in order',
 
   back: 'Back',
   home: 'Home',
@@ -69,6 +76,12 @@ const en = {
   game_tactics_blurb: 'Cricket on 10-20 and bull',
   game_random_name: 'Random Cricket',
   game_random_blurb: 'Seven random targets',
+  game_clock_name: 'Around the Clock',
+  game_clock_blurb: 'Hit targets 1–20 in order',
+  game_shanghai_name: 'Shanghai',
+  game_shanghai_blurb: 'Seven rounds, or a single-double-triple win',
+  game_countup_name: 'Count Up',
+  game_countup_blurb: 'Score as much as you can in eight rounds',
 }
 
 export type StringKey = keyof typeof en

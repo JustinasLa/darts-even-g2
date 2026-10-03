@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Practice category on the phone and G2, with Around the Clock, Shanghai and
+  Count Up.
+- Around the Clock tracks targets 1–20, accepting any multiplier and ending on
+  the first successful 20. Draft edits recalculate target guidance on both
+  surfaces without recording the turn until confirmation.
+- Shanghai plays seven rounds on targets 1–7, with normal target scoring and an
+  immediate win for a single, double and triple of the target in one visit.
+- Count Up plays eight three-dart rounds, with outer bull worth 25 and inner
+  bull worth 50. Shanghai and Count Up award the highest final total and declare
+  tied multiplayer totals a draw.
+- Target-first G2 entry for Clock and Shanghai, with every board number still
+  available for recording wrong darts.
+- Engine and phone/G2 integration coverage for all three modes, preserving 100%
+  statements, branches, functions and lines for every application TypeScript file.
+
 ## [0.1.0] - 2026-06-29
 
 ### Added

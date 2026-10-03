@@ -10,7 +10,7 @@ import type { EvenHubEvent } from '@evenrealities/even_hub_sdk'
 import { t } from './i18n'
 import type { StringKey } from './i18n'
 import type { Category, GameDef, Game, GameView, PlayerView } from './games'
-import { gamesByCategory, findGame, dartLabel, dartScore } from './games'
+import { gamesByCategory, findGame, dartLabel } from './games'
 import type { Dart } from './games'
 import flagIcon from './icons/Flag.svg?raw'
 import checklistIcon from './icons/Checklist.svg?raw'
@@ -165,18 +165,21 @@ let lensEntryMult = 1
 let lensEditIndex = 0
 let pendingDarts: Dart[] = []
 
-const CAT_ORDER: Category[] = ['x01', 'cricket']
+const CAT_ORDER: Category[] = ['x01', 'cricket', 'practice']
 const CAT_NAME: Record<Category, StringKey> = {
   x01: 'catX01',
   cricket: 'catCricket',
+  practice: 'catPractice',
 }
 const CAT_BLURB: Record<Category, StringKey> = {
   x01: 'catX01Blurb',
   cricket: 'catCricketBlurb',
+  practice: 'catPracticeBlurb',
 }
 const CAT_ICON: Record<Category, string> = {
   x01: flagIcon,
   cricket: checklistIcon,
+  practice: flagIcon,
 }
 
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -310,8 +313,14 @@ function lensNumValues(): number[] {
     }
     return vals
   }
+  const target = game!.view(pendingDarts, lensEditIndex).entryTarget
+  if (target !== undefined) {
+    vals.push(target)
+  }
   for (let n = 20; n >= 1; n--) {
-    vals.push(n)
+    if (n !== target) {
+      vals.push(n)
+    }
   }
   return vals
 }
@@ -372,9 +381,12 @@ function panelContent(): string {
   if (screen !== 'game' || !game) {
     return ''
   }
-  const v = game.view()
+  const v = game.view(pendingDarts)
   if (v.finished) {
     return ''
+  }
+  if (v.panel !== undefined) {
+    return v.panel
   }
   if (v.layout === 'cricket') {
     return cricketPanel(v)
@@ -815,11 +827,7 @@ function cricketBoard(v: GameView): string {
 }
 
 function turnBar(v: GameView): string {
-  const turn = v.turn.concat(pendingDarts.map(d => ({ label: dartLabel(d), score: dartScore(d) })))
-  let total = 0
-  for (const d of turn) {
-    total += d.score
-  }
+  const turn = v.turn
   let slots = ''
   for (let i = 0; i < 3; i++) {
     if (i < turn.length) {
@@ -831,7 +839,7 @@ function turnBar(v: GameView): string {
   return (
     '<div class="turnbar">' +
     '<div class="slots">' + slots + '</div>' +
-    '<div class="turntotal">' + total + '</div>' +
+    '<div class="turntotal">' + v.turnTotal + '</div>' +
     '</div>'
   )
 }
@@ -870,7 +878,7 @@ function renderGame() {
   const wasGame = app.querySelector('.game-screen') !== null
   const hadOverlay = app.querySelector('.overlay') !== null
   const focusIndex = Array.from(app.querySelectorAll('button')).indexOf(document.activeElement as HTMLButtonElement)
-  const v = game!.view()
+  const v = game!.view(pendingDarts)
   let banner = ''
   if (v.finished) {
     banner =

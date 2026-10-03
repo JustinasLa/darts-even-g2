@@ -38,7 +38,7 @@ export function dartLabel(d: Dart): string {
   return prefix + d.value
 }
 
-export type Category = 'x01' | 'cricket'
+export type Category = 'x01' | 'cricket' | 'practice'
 export type Layout = 'score' | 'cricket'
 
 export interface PlayerView {
@@ -64,6 +64,9 @@ export interface GameView {
   numbers?: number[]
   previous?: string
   average?: string
+  primaryLabel?: string
+  panel?: string
+  entryTarget?: number
 }
 
 export interface Game {
@@ -71,7 +74,7 @@ export interface Game {
   commitTurn(): void
   undo(): void
   currentTurn(): Dart[]
-  view(): GameView
+  view(pending?: Dart[], turnIndex?: number): GameView
   lens(sel: number, pending: Dart[]): string
   checkoutFor(pending: Dart[]): Dart[] | undefined
 }
@@ -134,22 +137,29 @@ abstract class GameBase<S extends Core> implements Game {
     return this.state.turn.map(d => ({ ...d }))
   }
 
+  protected previewTurn(pending: Dart[], limit = 3): Dart[] {
+    return this.state.turn.concat(this.state.finished ? [] : pending).slice(0, limit)
+  }
+
   abstract applyDart(d: Dart): void
   abstract commitTurn(): void
-  abstract view(): GameView
+  abstract view(pending?: Dart[], turnIndex?: number): GameView
 
   checkoutFor(_pending: Dart[]): Dart[] | undefined {
     return undefined
   }
 
   lens(sel: number, pending: Dart[]): string {
-    const v = this.view()
+    const v = this.view(pending)
     const p = v.players.find(function (player) {
       return player.active || player.winner
     })
     const lines: string[] = []
     if (p && p.primary !== '') {
-      lines.push(t('lensCurrentScore') + ': ' + p.primary)
+      lines.push((v.primaryLabel || t('lensCurrentScore')) + ': ' + p.primary)
+    }
+    if (v.hint) {
+      lines.push(v.hint)
     }
     if (v.previous !== undefined) {
       lines.push(t('lensPreviousScore') + ': ' + v.previous)
@@ -160,14 +170,14 @@ abstract class GameBase<S extends Core> implements Game {
     if (v.finished) {
       lines.push('')
       lines.push(t('gameOver'))
+      if (v.message) {
+        lines.push(v.message)
+      }
       return lines.join('\n')
     }
     const labels: string[] = []
     for (const slot of v.turn) {
       labels.push(slot.label)
-    }
-    for (const d of pending) {
-      labels.push(dartLabel(d))
     }
     lines.push('')
     for (let i = 0; i < 3; i++) {
@@ -419,8 +429,21 @@ class X01Game extends GameBase<X01State> {
     s.turnStartScored = s.players[s.active].scored
   }
 
-  view(): GameView {
+  view(pending: Dart[] = []): GameView {
     const s = this.state
+    const turn = this.previewTurn(pending)
+    const active = s.players[s.active]
+    let points = active.scored - s.turnStartScored
+    let opened = active.in
+    for (const d of turn.slice(s.turn.length)) {
+      if (!opened) {
+        if (d.mult !== 2) {
+          continue
+        }
+        opened = true
+      }
+      points += dartScore(d)
+    }
     const players: PlayerView[] = []
     for (let i = 0; i < s.players.length; i++) {
       const p = s.players[i]
@@ -455,8 +478,8 @@ class X01Game extends GameBase<X01State> {
       hint: '',
       message: s.message,
       layout: 'score',
-      turn: turnSlots(s.turn),
-      turnTotal: s.players[s.active].scored - s.turnStartScored,
+      turn: turnSlots(turn),
+      turnTotal: points,
       finished: s.finished,
       winner: s.winner,
       players,
@@ -618,8 +641,9 @@ class CricketGame extends GameBase<CricketState> {
     s.active = (s.active + 1) % s.players.length
   }
 
-  view(): GameView {
+  view(pending: Dart[] = []): GameView {
     const s = this.state
+    const turn = this.previewTurn(pending)
     const players: PlayerView[] = []
     for (let i = 0; i < s.players.length; i++) {
       const p = s.players[i]
@@ -638,12 +662,177 @@ class CricketGame extends GameBase<CricketState> {
       hint: '',
       message: s.message,
       layout: 'cricket',
-      turn: turnSlots(s.turn),
-      turnTotal: turnTotal(s.turn),
+      turn: turnSlots(turn),
+      turnTotal: turnTotal(turn),
       finished: s.finished,
       winner: s.winner,
       players,
       numbers: s.numbers.slice(),
+    }
+  }
+}
+
+interface ClockState extends Core {
+  names: string[]
+  targets: number[]
+  hits: number
+}
+
+class ClockGame extends GameBase<ClockState> {
+  constructor(names: string[]) {
+    super({ ...newCore(), names, targets: names.map(() => 1), hits: 0 })
+  }
+
+  applyDart(d: Dart): void {
+    const s = this.state
+    if (s.finished) {
+      return
+    }
+    this.save()
+    s.turn.push({ ...d })
+    if (d.value === s.targets[s.active]) {
+      s.targets[s.active] += 1
+      s.hits += 1
+      if (s.targets[s.active] > 20) {
+        s.finished = true
+        s.winner = s.active
+        return
+      }
+    }
+    if (this.turnFull()) {
+      this.commitTurn()
+    }
+  }
+
+  commitTurn(): void {
+    const s = this.state
+    if (s.finished) {
+      return
+    }
+    s.turn = []
+    s.hits = 0
+    s.active = (s.active + 1) % s.names.length
+  }
+
+  view(pending: Dart[] = [], turnIndex = 3): GameView {
+    const s = this.state
+    const targets = s.targets.slice()
+    targets[s.active] -= s.hits
+    const turn: Dart[] = []
+    let hits = 0
+    for (const d of this.previewTurn(pending, turnIndex)) {
+      turn.push(d)
+      if (d.value === targets[s.active]) {
+        targets[s.active] += 1
+        hits += 1
+        if (targets[s.active] > 20) {
+          break
+        }
+      }
+    }
+    const target = Math.min(targets[s.active], 20)
+    return {
+      title: t('game_clock_name'), hint: t('clockRule'), message: '', layout: 'score',
+      primaryLabel: t('target'), panel: t('target') + '\n' + target,
+      turn: turnSlots(turn), turnTotal: hits, finished: s.finished, winner: s.winner,
+      entryTarget: target,
+      players: s.names.map((name, i) => ({
+        name, primary: String(Math.min(targets[i], 20)),
+        secondary: t('targetsHit') + ': ' + (targets[i] - 1) + '/20',
+        active: i === s.active && !s.finished, winner: s.finished && s.winner === i, out: false,
+      })),
+    }
+  }
+}
+
+interface RoundState extends Core {
+  names: string[]
+  scores: number[]
+  round: number
+  rounds: number
+  shanghai: boolean
+  segments: number
+}
+
+class RoundGame extends GameBase<RoundState> {
+  constructor(names: string[], shanghai: boolean) {
+    super({ ...newCore(), names, scores: names.map(() => 0), round: 1,
+      rounds: shanghai ? 7 : 8, shanghai, segments: 0 })
+  }
+
+  applyDart(d: Dart): void {
+    const s = this.state
+    if (s.finished) {
+      return
+    }
+    this.save()
+    s.turn.push({ ...d })
+    if (!s.shanghai || d.value === s.round) {
+      const score = dartScore(d)
+      s.scores[s.active] += score
+      if (s.shanghai) {
+        s.segments |= 1 << (d.mult - 1)
+        if (s.segments === 7) {
+          s.finished = true
+          s.winner = s.active
+          return
+        }
+      }
+    }
+    if (this.turnFull()) {
+      this.commitTurn()
+    }
+  }
+
+  commitTurn(): void {
+    const s = this.state
+    if (s.finished) {
+      return
+    }
+    s.turn = []
+    s.segments = 0
+    s.active += 1
+    if (s.active < s.names.length) {
+      return
+    }
+    s.active = 0
+    if (s.round < s.rounds) {
+      s.round += 1
+      return
+    }
+    s.finished = true
+    const best = Math.max(...s.scores)
+    const leaders = s.scores.map((score, i) => score === best ? i : -1).filter(i => i >= 0)
+    s.winner = leaders.length === 1 ? leaders[0] : null
+    if (s.winner === null) {
+      s.message = t('draw')
+    }
+  }
+
+  view(pending: Dart[] = []): GameView {
+    const s = this.state
+    const turn = this.previewTurn(pending)
+    let points = 0
+    for (const d of turn) {
+      if (!s.shanghai || d.value === s.round) {
+        points += dartScore(d)
+      }
+    }
+    let hint = t('round') + ' ' + s.round + '/' + s.rounds
+    let panel = t('round') + '\n' + s.round + '/' + s.rounds
+    if (s.shanghai) {
+      hint += ' · ' + t('target') + ' ' + s.round
+      panel = t('target') + '\n' + s.round + '\n\n' + panel
+    }
+    return {
+      title: t(s.shanghai ? 'game_shanghai_name' : 'game_countup_name'),
+      hint, panel, message: s.message, layout: 'score',
+      turn: turnSlots(turn), turnTotal: points, finished: s.finished, winner: s.winner,
+      entryTarget: s.shanghai ? s.round : undefined,
+      players: s.names.map((name, i) => ({
+        name, primary: String(s.scores[i]), secondary: '',
+        active: i === s.active && !s.finished, winner: s.finished && s.winner === i, out: false,
+      })),
     }
   }
 }
@@ -754,6 +943,18 @@ export const GAMES: GameDef[] = [
   cricketDef('noscore', 'game_noscore_name', 'game_noscore_blurb', { numbers: CRICKET_STD, scoring: false }),
   cricketDef('tactics', 'game_tactics_name', 'game_tactics_blurb', { numbers: CRICKET_TACTICS, scoring: true }),
   cricketDef('random', 'game_random_name', 'game_random_blurb', { numbers: null, scoring: true }),
+  {
+    id: 'clock', category: 'practice', name: 'game_clock_name', blurb: 'game_clock_blurb',
+    minPlayers: 1, maxPlayers: 4, options: [], create: players => new ClockGame(players),
+  },
+  {
+    id: 'shanghai', category: 'practice', name: 'game_shanghai_name', blurb: 'game_shanghai_blurb',
+    minPlayers: 1, maxPlayers: 4, options: [], create: players => new RoundGame(players, true),
+  },
+  {
+    id: 'countup', category: 'practice', name: 'game_countup_name', blurb: 'game_countup_blurb',
+    minPlayers: 1, maxPlayers: 4, options: [], create: players => new RoundGame(players, false),
+  },
 ]
 
 export function gamesByCategory(cat: Category): GameDef[] {
