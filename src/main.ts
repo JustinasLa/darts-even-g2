@@ -191,13 +191,13 @@ function esc(s: string): string {
 
 function markSymbol(m: number): string {
   if (m >= 3) {
-    return '<span class="cmark-ico">' + dotIcon + '</span>'
+    return '<span class="cmark-ico" aria-hidden="true">' + dotIcon + '</span>'
   }
   if (m === 2) {
-    return '<span class="cmark-ico">' + crossIcon + '</span>'
+    return '<span class="cmark-ico" aria-hidden="true">' + crossIcon + '</span>'
   }
   if (m === 1) {
-    return '<span class="cmark-ico">' + slashIcon + '</span>'
+    return '<span class="cmark-ico" aria-hidden="true">' + slashIcon + '</span>'
   }
   return ''
 }
@@ -802,11 +802,12 @@ function cricketBoard(v: GameView): string {
   }
   let rows = ''
   for (let r = 0; r < numbers.length; r++) {
-    let cells = '<td class="cnum">' + esc(numberLabel(numbers[r])) + '</td>'
+    let cells = '<th scope="row" class="cnum">' + esc(numberLabel(numbers[r])) + '</th>'
     for (const p of v.players) {
       const m = p.marks ? p.marks[r] : 0
       const closed = m >= 3 ? ' cmark-closed' : ''
-      cells += '<td class="cmark' + closed + '">' + markSymbol(m) + '</td>'
+      const label = m >= 3 ? t('cricketClosed') : m === 2 ? t('cricketTwoMarks') : m === 1 ? t('cricketOneMark') : t('cricketNoMarks')
+      cells += '<td class="cmark' + closed + '" aria-label="' + esc(label) + '">' + markSymbol(m) + '</td>'
     }
     rows += '<tr>' + cells + '</tr>'
   }
@@ -837,15 +838,15 @@ function turnBar(v: GameView): string {
 
 function keypad(): string {
   let mults = ''
-  const labels: { m: number; key: string }[] = [
-    { m: 1, key: 'single' },
-    { m: 2, key: 'double' },
-    { m: 3, key: 'triple' },
+  const labels: { m: number; key: StringKey; name: StringKey }[] = [
+    { m: 1, key: 'single', name: 'lensSingle' },
+    { m: 2, key: 'double', name: 'lensDouble' },
+    { m: 3, key: 'triple', name: 'lensTriple' },
   ]
   for (const l of labels) {
     mults +=
-      '<button class="mbtn ' + (mult === l.m ? 'mbtn-on' : '') + '" data-mult="' + l.m + '">' +
-      esc(t(l.key as 'single')) + '</button>'
+      '<button class="mbtn ' + (mult === l.m ? 'mbtn-on' : '') + '" data-mult="' + l.m + '" aria-label="' + esc(t(l.name)) + '" aria-pressed="' + (mult === l.m) + '">' +
+      esc(t(l.key)) + '</button>'
   }
   let nums = ''
   for (let n = 1; n <= 20; n++) {
@@ -866,12 +867,15 @@ function keypad(): string {
 }
 
 function renderGame() {
+  const wasGame = app.querySelector('.game-screen') !== null
+  const hadOverlay = app.querySelector('.overlay') !== null
+  const focusIndex = Array.from(app.querySelectorAll('button')).indexOf(document.activeElement as HTMLButtonElement)
   const v = game!.view()
   let banner = ''
   if (v.finished) {
     banner =
-      '<div class="overlay"><div class="over-card">' +
-      '<div class="over-winner">' + esc(t('gameOver')) + '</div>' +
+      '<div class="overlay" role="dialog" aria-modal="true" aria-labelledby="game-over-title"><div class="over-card">' +
+      '<div class="over-winner" id="game-over-title">' + esc(t('gameOver')) + '</div>' +
       '<div class="over-actions">' +
       '<button class="primary-btn" data-act="rematch">' + esc(t('playAgain')) + '</button>' +
       '<button class="ghost-btn" data-act="modes">' + esc(t('backToModes')) + '</button>' +
@@ -891,7 +895,20 @@ function renderGame() {
     banner +
     '</main>'
 
+  if (v.finished) {
+    app.querySelectorAll<HTMLButtonElement>('.topbar button, .keypad button').forEach(function (b) {
+      b.disabled = true
+    })
+  }
   bindGame(v)
+  if (v.finished && !hadOverlay) {
+    app.querySelector<HTMLButtonElement>('[data-act="rematch"]')!.focus()
+  } else if (wasGame && focusIndex >= 0) {
+    const button = app.querySelectorAll<HTMLButtonElement>('button')[focusIndex]
+    if (button) {
+      button.focus()
+    }
+  }
   drawLens(lensContent())
 }
 

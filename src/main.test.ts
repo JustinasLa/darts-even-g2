@@ -356,6 +356,110 @@ describe('Even G2 bridge', function () {
 })
 
 describe('phone scoreboard', function () {
+  it('keeps keyboard focus on scoring controls after redraws and exposes multiplier names and states', async function () {
+    await load()
+    await open()
+    for (const [mult, label] of [[1, 'Single'], [2, 'Double'], [3, 'Triple']]) {
+      const button = document.querySelector<HTMLButtonElement>('[data-mult="' + mult + '"]')!
+      expect(button.getAttribute('aria-label')).toBe(label)
+      expect(button.getAttribute('aria-pressed')).toBe(mult === 1 ? 'true' : 'false')
+    }
+    for (const selector of ['[data-mult="3"]', '[data-num="20"]', '[data-bull="1"]', '[data-bull="2"]', '[data-miss]', '[data-act="next"]', '[data-act="undo"]']) {
+      const previous = document.querySelector<HTMLButtonElement>(selector)!
+      previous.focus()
+      await click(selector)
+      const current = document.querySelector<HTMLButtonElement>(selector)!
+      expect(current).not.toBe(previous)
+      expect(document.activeElement).toBe(current)
+      expect(current.disabled).toBe(false)
+      expect(document.querySelector('[data-mult="3"]')!.getAttribute('aria-pressed')).toBe(selector === '[data-mult="3"]' ? 'true' : 'false')
+    }
+    expect(document.querySelector('[data-mult="1"]')!.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('keeps focus during lens score confirmation and leaves external focus alone', async function () {
+    await load()
+    await open()
+    const selector = '[data-num="20"]'
+    document.querySelector<HTMLButtonElement>(selector)!.focus()
+    await lensDart(0, 0)
+    await move(2)
+    await tap()
+    expect(document.activeElement).toBe(document.querySelector(selector))
+    expect(document.querySelector('.pscore')!.textContent).toBe('281')
+    const outside = document.createElement('button')
+    document.body.append(outside)
+    outside.focus()
+    await click('[data-mult="2"]')
+    expect(document.activeElement).toBe(outside)
+  })
+
+  it('does not transfer category button focus to an unrelated game control', async function () {
+    await load()
+    await click('[data-cat="x01"]')
+    document.querySelector<HTMLButtonElement>('[data-id="301"]')!.focus()
+    await click('[data-id="301"]')
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it('labels and focuses the results dialog and disables background controls until a rematch', async function () {
+    await load()
+    await open()
+    document.querySelector<HTMLButtonElement>('[data-num="8"]')!.focus()
+    await winOnPhone()
+    const dialog = document.querySelector('[role="dialog"]')!
+    expect(dialog).not.toBeNull()
+    expect(dialog.getAttribute('aria-modal')).toBe('true')
+    expect(document.querySelector('#' + dialog.getAttribute('aria-labelledby'))!.textContent).toBe('Game over')
+    expect(document.activeElement).toBe(document.querySelector('[data-act="rematch"]'))
+    const background = document.querySelectorAll<HTMLButtonElement>('.topbar button, .keypad button')
+    expect(background.length).toBeGreaterThan(0)
+    for (const button of background) {
+      expect(button.disabled).toBe(true)
+      button.focus()
+      expect(document.activeElement).toBe(document.querySelector('[data-act="rematch"]'))
+      button.click()
+    }
+    await flush()
+    expect(document.querySelector('[role="dialog"]')).toBe(dialog)
+    expect(document.querySelector<HTMLButtonElement>('[data-act="modes"]')!.disabled).toBe(false)
+    await click('[data-act="rematch"]')
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(document.querySelector('.pscore')!.textContent).toBe('301')
+    expect(Array.from(document.querySelectorAll<HTMLButtonElement>('button')).every(button => !button.disabled)).toBe(true)
+  })
+
+  it('preserves focus in a results dialog that remains open after a redraw', async function () {
+    useGame(fixture({ finished: true }))
+    await load()
+    await open()
+    const previous = document.querySelector<HTMLButtonElement>('[data-act="rematch"]')!
+    expect(document.activeElement).toBe(previous)
+    await click('[data-act="rematch"]')
+    expect(document.activeElement).toBe(document.querySelector('[data-act="rematch"]'))
+    expect(document.activeElement).not.toBe(previous)
+  })
+
+  it('exposes localized cricket mark counts and closed targets while hiding decorative icons', async function () {
+    const i18n = await import('./i18n')
+    const translate = i18n.t
+    const labels: Partial<Record<import('./i18n').StringKey, string>> = {
+      cricketNoMarks: 'No hits <&"', cricketOneMark: 'One hit', cricketTwoMarks: 'Two hits', cricketClosed: 'Closed target',
+    }
+    vi.spyOn(i18n, 't').mockImplementation(key => labels[key] ?? translate(key))
+    await load()
+    await open('cricket')
+    const mark = () => document.querySelector('.cricket tbody tr .cmark')!
+    expect(document.querySelector('.cricket tbody tr .cnum')!.getAttribute('scope')).toBe('row')
+    expect(mark().getAttribute('aria-label')).toBe('No hits <&"')
+    expect(mark().querySelector('svg')).toBeNull()
+    for (const label of ['One hit', 'Two hits', 'Closed target']) {
+      await phoneDart(20)
+      expect(mark().getAttribute('aria-label')).toBe(label)
+      expect(mark().querySelector('.cmark-ico')!.getAttribute('aria-hidden')).toBe('true')
+    }
+  })
+
   it('navigates categories, modes and back buttons', async function () {
     await load()
     await click('[data-cat="cricket"]')
