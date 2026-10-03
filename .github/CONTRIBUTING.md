@@ -5,7 +5,7 @@ app with Vite + TypeScript. This guide walks you through making a change.
 
 ## Prerequisites
 
-- [Node.js 18+](https://nodejs.org) (provides `node` and `npm`)
+- [Node.js](https://nodejs.org) `^20.17.0 || ^22.13.0 || >=24.0.0` (provides `node` and `npm`)
 
 
 ## 1. Fork and clone
@@ -103,7 +103,7 @@ Keep changes consistent with the existing code:
 
 - **No code comments.** The source is intentionally comment-free
 - **No hard-coded user-facing text.** Every string shown to the user goes
-  through the string table in [`src/i18n.ts`](src/i18n.ts) via `t('key')`. Add a
+  through the string table in [`src/i18n.ts`](../src/i18n.ts) via `t('key')`. Add a
   new key to the `en` table rather than writing literals in `src/main.ts`.
 - **Match the surrounding style** - indentation, naming, and existing patterns.
 - **One logical change per pull request.** Smaller PRs are reviewed faster.
